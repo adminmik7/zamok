@@ -3,6 +3,7 @@ agp = "8.13.2"
 kotlin = "2.3.21"
 composeBom = "2026.04.01"
 activityCompose = "1.11.0"
+junit = "4.13.2"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -10,6 +11,7 @@ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", versi
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
