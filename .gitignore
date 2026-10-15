@@ -20,6 +20,11 @@ captures/
 *.keystore
 keystore.properties
 
+# Credentials — never commit tokens or passwords
+.token
+*.token
+secrets.properties
+
 # OS
 .DS_Store
 Thumbs.db
