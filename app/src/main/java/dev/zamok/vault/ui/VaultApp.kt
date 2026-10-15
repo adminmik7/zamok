@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -35,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +57,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import dev.zamok.vault.R
 import dev.zamok.vault.crypto.BiometricBlob
 import dev.zamok.vault.crypto.CharClass
@@ -334,14 +340,68 @@ internal fun EntryDialog(
         EntryList.categoryOptions(categories, category)
     }
 
-    AlertDialog(
+    // A full screen, not a dialog box. A record has a dozen fields and a box that shows four of them
+    // at a time makes the bottom half of the form — which is where a card or a passport is filled in —
+    // something you have to fish for, with the buttons drifting off the bottom. What this is modelled
+    // on is a full screen too, with the actions in a bar at the top.
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(if (initial.id.isEmpty()) R.string.new_entry else R.string.edit_entry)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
+                    }
+                    Text(
+                        text = stringResource(
+                            if (initial.id.isEmpty()) R.string.new_entry else R.string.edit_entry
+                        ),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (onDelete != null) {
+                        IconButton(onClick = onDelete) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = stringResource(R.string.delete),
+                            )
+                        }
+                    }
+                    TextButton(
+                        onClick = {
+                            onSave(
+                                initial.copy(
+                                    type = type,
+                                    title = title,
+                                    username = username,
+                                    password = password,
+                                    url = url,
+                                    notes = notes,
+                                    category = category,
+                                    tags = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                                    totpSecret = totpSecret,
+                                    favorite = favorite,
+                                )
+                            )
+                        },
+                    ) { Text(stringResource(R.string.save)) }
+                }
+                HorizontalDivider()
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                 TypeField(type = type, onTypeChange = { type = it })
                 // The category next, the way the screens this is modelled on put them: two choices
                 // on top, because together they decide where the record lands and what it looks
@@ -397,36 +457,9 @@ internal fun EntryDialog(
                     Text(stringResource(R.string.field_favorite))
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSave(
-                        initial.copy(
-                            type = type,
-                            title = title,
-                            username = username,
-                            password = password,
-                            url = url,
-                            notes = notes,
-                            category = category,
-                            tags = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() },
-                            totpSecret = totpSecret,
-                            favorite = favorite,
-                        )
-                    )
-                },
-            ) { Text(stringResource(R.string.save)) }
-        },
-        dismissButton = {
-            Column {
-                if (onDelete != null) {
-                    TextButton(onClick = onDelete) { Text(stringResource(R.string.delete)) }
-                }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-            }
-        },
-    )
+        }
+    }
+}
 
     if (generatorOpen) {
         PasswordGeneratorDialog(
