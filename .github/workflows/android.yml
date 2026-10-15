@@ -34,6 +34,17 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      # The debug keystore is created on first use, and a runner starts clean every time: without
+      # this cache every run signed the APK with a brand new key, so installing it over the
+      # previous one failed with "App not installed" and the app had to be uninstalled first —
+      # which, with backups off, also threw the vault away. One stable key makes an update an
+      # ordinary update.
+      - name: Cache the debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
       - name: Test and build debug APK
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
