@@ -7,22 +7,26 @@ import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -36,13 +40,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.zamok.vault.R
 import dev.zamok.vault.crypto.BiometricBlob
+import dev.zamok.vault.crypto.CharClass
 import dev.zamok.vault.crypto.KeystoreVaultKey
+import dev.zamok.vault.crypto.PasswordGenerator
 import dev.zamok.vault.model.Entry
+import kotlin.math.roundToInt
 
 /**
  * The whole app: one screen when locked, one when open. No navigation library — there is nowhere
@@ -365,6 +373,7 @@ private fun EntryDialog(
     var category by remember { mutableStateOf(initial.category) }
     var tags by remember { mutableStateOf(initial.tags.joinToString(", ")) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var generatorOpen by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -386,9 +395,14 @@ private fun EntryDialog(
                         PasswordVisualTransformation()
                     },
                 )
-                if (password.isNotEmpty()) {
-                    TextButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Text(stringResource(if (passwordVisible) R.string.hide_password else R.string.show_password))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (password.isNotEmpty()) {
+                        TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Text(stringResource(if (passwordVisible) R.string.hide_password else R.string.show_password))
+                        }
+                    }
+                    TextButton(onClick = { generatorOpen = true }) {
+                        Text(stringResource(R.string.generate_password))
                     }
                 }
                 Field(R.string.field_url, url) { url = it }
@@ -423,6 +437,16 @@ private fun EntryDialog(
             }
         },
     )
+
+    if (generatorOpen) {
+        PasswordGeneratorDialog(
+            onDismiss = { generatorOpen = false },
+            onUse = { generated ->
+                password = generated
+                generatorOpen = false
+            },
+        )
+    }
 }
 
 @Composable
@@ -440,5 +464,85 @@ private fun Field(
         singleLine = singleLine,
         visualTransformation = visualTransformation,
         modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private const val MAX_GENERATED_LENGTH = 64
+
+/** The label of a class is a resource id, so the enum itself stays free of Android. */
+private val CharClass.label: Int
+    get() = when (this) {
+        CharClass.LOWERCASE -> R.string.class_lowercase
+        CharClass.UPPERCASE -> R.string.class_uppercase
+        CharClass.DIGITS -> R.string.class_digits
+        CharClass.SYMBOLS -> R.string.class_symbols
+    }
+
+/**
+ * Picks a password for the entry being edited and hands it back through [onUse].
+ *
+ * The password is recomputed rather than kept: changing a setting and asking for another one are
+ * the same thing, so there is no second copy of it to fall out of step.
+ */
+@Composable
+private fun PasswordGeneratorDialog(onDismiss: () -> Unit, onUse: (String) -> Unit) {
+    var length by remember { mutableStateOf(16) }
+    var classes by remember { mutableStateOf(CharClass.entries.toSet()) }
+    var nonce by remember { mutableStateOf(0) }
+
+    val password = remember(length, classes, nonce) { PasswordGenerator.generate(length, classes) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.generate_password)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Selectable so the password can be copied out to wherever it is needed next.
+                SelectionContainer {
+                    Text(
+                        text = password,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.password_length, length),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Slider(
+                    value = length.toFloat(),
+                    onValueChange = { length = it.roundToInt() },
+                    valueRange = PasswordGenerator.MIN_LENGTH.toFloat()..MAX_GENERATED_LENGTH.toFloat(),
+                    steps = MAX_GENERATED_LENGTH - PasswordGenerator.MIN_LENGTH - 1,
+                )
+                for (charClass in CharClass.entries) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = charClass in classes,
+                            onCheckedChange = { checked ->
+                                // The last class standing cannot be switched off: a password has to
+                                // be built from something.
+                                classes = when {
+                                    checked -> classes + charClass
+                                    classes.size > 1 -> classes - charClass
+                                    else -> classes
+                                }
+                            },
+                        )
+                        Text(stringResource(charClass.label))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                TextButton(onClick = { nonce++ }) { Text(stringResource(R.string.another_password)) }
+                TextButton(onClick = { onUse(password) }) { Text(stringResource(R.string.use_password)) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
     )
 }
