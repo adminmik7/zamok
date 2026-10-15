@@ -66,6 +66,9 @@
     <string name="field_url">Адрес</string>
     <string name="field_notes">Заметки</string>
     <string name="field_category">Категория</string>
+    <string name="category_new">Новая категория…</string>
+    <string name="category_new_hint">Название категории</string>
+    <string name="cd_pick_category">Выбрать из списка</string>
     <string name="field_tags">Метки (через запятую)</string>
     <string name="field_favorite">В избранном</string>
     <string name="save">Сохранить</string>

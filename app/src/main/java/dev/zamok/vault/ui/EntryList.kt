@@ -107,12 +107,25 @@ object EntryList {
      * sees: it has to be the same on every device and every run, and adding up characters is a
      * promise that is easy to keep.
      */
-    fun avatarColorOf(entry: Entry): Long {
-        val key = entry.title.trim().lowercase()
+    fun avatarColorOf(entry: Entry): Long = colorFor(entry.title)
+
+    /** The same colour by name, so a category dot matches the circle its entries get in the list. */
+    fun colorFor(name: String): Long {
+        val key = name.trim().lowercase()
         if (key.isEmpty()) return AVATAR_COLORS.first()
         val total = key.fold(0) { sum, character -> sum + character.code }
         return AVATAR_COLORS[total % AVATAR_COLORS.size]
     }
+
+    /**
+     * What the category picker offers: the categories already in use, plus the one this entry is in.
+     *
+     * A category nothing uses yet still has to be offered — an entry imported with a category the
+     * user never typed keeps it that way. Sorted and without blanks, because a blank category is
+     * "Без категории", which is a heading, not a choice.
+     */
+    fun categoryOptions(known: List<String>, current: String): List<String> =
+        (known + current.trim()).filter { it.isNotEmpty() }.distinct().sorted()
 
     private fun Entry.matches(needle: String): Boolean =
         title.lowercase().contains(needle) ||

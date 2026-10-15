@@ -274,4 +274,29 @@ class EntryListTest {
     fun `an entry without a title still shows something`() {
         assertEquals("?", EntryList.initialOf(entry("1", title = "   ")))
     }
+
+    // ---- the category picker ----
+
+    @Test
+    fun `the category options offer what is in use plus the one being edited`() {
+        assertEquals(listOf("Банк", "Работа"), EntryList.categoryOptions(listOf("Банк"), "Работа"))
+    }
+
+    @Test
+    fun `the category options are sorted, unique and without blanks`() {
+        assertEquals(
+            listOf("Банк", "Почта"),
+            EntryList.categoryOptions(listOf("Почта", "Банк", "Почта"), "   "),
+        )
+    }
+
+    @Test
+    fun `an empty vault offers no categories`() {
+        assertTrue(EntryList.categoryOptions(emptyList(), "").isEmpty())
+    }
+
+    @Test
+    fun `the same name gives the same colour on an avatar and on a category dot`() {
+        assertEquals(EntryList.avatarColorOf(entry("1", title = "Банк")), EntryList.colorFor("банк"))
+    }
 }

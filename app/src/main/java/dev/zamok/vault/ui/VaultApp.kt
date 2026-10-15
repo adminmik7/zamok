@@ -5,20 +5,32 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -32,11 +44,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.zamok.vault.R
 import dev.zamok.vault.crypto.BiometricBlob
@@ -260,6 +275,7 @@ internal fun ErrorText(error: VaultError?, onDismiss: (() -> Unit)? = null) {
 @Composable
 internal fun EntryDialog(
     initial: Entry,
+    categories: List<String>,
     onDismiss: () -> Unit,
     onSave: (Entry) -> Unit,
     onDelete: (() -> Unit)?,
@@ -276,6 +292,11 @@ internal fun EntryDialog(
     var passwordVisible by remember { mutableStateOf(false) }
     var generatorOpen by remember { mutableStateOf(false) }
 
+    // Recomputed while a new category is being typed, which costs nothing: a handful of strings.
+    val categoryChoices = remember(categories, category) {
+        EntryList.categoryOptions(categories, category)
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (initial.id.isEmpty()) R.string.new_entry else R.string.edit_entry)) },
@@ -284,6 +305,13 @@ internal fun EntryDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // The category first, the way the screen this is modelled on does it: it is the
+                // choice that decides where the entry lands, and the list is grouped by it.
+                CategoryField(
+                    category = category,
+                    options = categoryChoices,
+                    onCategoryChange = { category = it },
+                )
                 Field(R.string.field_title, title) { title = it }
                 Field(R.string.field_username, username) { username = it }
                 Field(
@@ -307,7 +335,6 @@ internal fun EntryDialog(
                     }
                 }
                 Field(R.string.field_url, url) { url = it }
-                Field(R.string.field_category, category) { category = it }
                 Field(R.string.field_tags, tags) { tags = it }
                 Field(R.string.field_totp, totpSecret) { totpSecret = it }
                 if (totpSecret.isNotBlank() && Totp.parse(totpSecret) == null) {
@@ -388,6 +415,110 @@ private fun Field(
         visualTransformation = visualTransformation,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * Picking a category, the way the app this screen takes its shape from does it: a select box that
+ * offers the categories already in use, with "новая" at the end for one that does not exist yet.
+ *
+ * Offered rather than typed from memory, because a vault ends up with "Банк" and "банк" as two
+ * separate groups otherwise — and every group in the list is one this box handed out.
+ */
+@Composable
+private fun CategoryField(
+    category: String,
+    options: List<String>,
+    onCategoryChange: (String) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var typing by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = stringResource(R.string.field_category),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (typing) {
+            OutlinedTextField(
+                value = category,
+                onValueChange = onCategoryChange,
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.category_new_hint)) },
+                trailingIcon = {
+                    IconButton(onClick = { typing = false }) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.cd_pick_category),
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            Box {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { menuOpen = true }
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // The colour the entry's own circle gets in the list when it shares the name.
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(Color(EntryList.colorFor(category))),
+                    )
+                    Text(
+                        text = category.ifBlank { stringResource(R.string.uncategorized) },
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 10.dp),
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.uncategorized)) },
+                        onClick = {
+                            onCategoryChange("")
+                            menuOpen = false
+                        },
+                    )
+                    for (option in options) {
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                onCategoryChange(option)
+                                menuOpen = false
+                            },
+                        )
+                    }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.category_new)) },
+                        onClick = {
+                            // Emptied rather than prefilled: "новая" means a name that is not
+                            // there yet, and editing the old one into the new one is not the job.
+                            onCategoryChange("")
+                            typing = true
+                            menuOpen = false
+                        },
+                    )
+                }
+            }
+        }
+    }
 }
 
 private const val MAX_GENERATED_LENGTH = 64

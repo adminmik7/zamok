@@ -332,7 +332,10 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
 
     if (adding) {
         EntryDialog(
-            initial = Entry(id = ""),
+            // A new entry lands in the category that is being filtered, if one is. The picker is
+            // still there to change it — it just starts where the user is looking.
+            initial = Entry(id = "", category = selectedCategory.orEmpty()),
+            categories = categories,
             onDismiss = { adding = false },
             onSave = { controller.add(it); adding = false },
             onDelete = null,
@@ -342,6 +345,7 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     editing?.let { entry ->
         EntryDialog(
             initial = entry,
+            categories = categories,
             onDismiss = { editing = null },
             onSave = { controller.update(it); editing = null },
             onDelete = { controller.delete(entry.id); editing = null },
