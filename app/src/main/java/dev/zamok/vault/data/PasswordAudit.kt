@@ -1,7 +1,7 @@
 package dev.zamok.vault.data
 
 import dev.zamok.vault.model.Entry
-import java.net.URI
+import dev.zamok.vault.model.host
 
 /** Why a stored password is worth changing. */
 enum class WeakReason {
@@ -138,17 +138,9 @@ object PasswordAudit {
      * built around "example" is caught in `example.com` — nobody puts the dot in.
      */
     private fun termsOf(entry: Entry): List<String> {
-        val labels = hostOf(entry.url).split('.').filter { it.isNotEmpty() }
+        val labels = entry.host.split('.').filter { it.isNotEmpty() }
         return (listOf(entry.title, entry.username) + labels)
             .map { it.trim().lowercase() }
             .filter { it.length >= MIN_TERM_LENGTH }
-    }
-
-    private fun hostOf(url: String): String {
-        if (url.isBlank()) return ""
-        // A host only comes back when the address carries a scheme; otherwise take the leading part.
-        val host = runCatching { URI(url).host }.getOrNull()
-            ?: url.substringBefore('/').substringAfter("://")
-        return host.removePrefix("www.")
     }
 }

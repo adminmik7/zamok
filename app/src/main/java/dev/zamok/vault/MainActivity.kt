@@ -4,8 +4,8 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
 import dev.zamok.vault.ui.VaultApp
+import dev.zamok.vault.ui.ZamokTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
         // the recents switcher shows the list to anyone holding the phone.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
-            MaterialTheme {
+            ZamokTheme {
                 VaultApp(controller)
             }
         }

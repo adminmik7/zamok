@@ -28,9 +28,34 @@
 
     <!-- Vault -->
     <string name="empty_vault">Хранилище пустое. Добавьте первую запись.</string>
+    <string name="nothing_found">Ничего не найдено.</string>
+    <string name="all_entries">Все записи</string>
+    <string name="favorites">Избранное</string>
+    <string name="uncategorized">Без категории</string>
+    <string name="search_hint">Поиск</string>
+    <string name="sort_by_title">По названию</string>
+    <string name="sort_by_recent">Сначала изменённые</string>
+    <string name="subtitle_username">Логин: %1$s</string>
+    <string name="subtitle_password">Пароль: %1$s</string>
     <string name="add_entry">Добавить</string>
     <string name="lock">Закрыть</string>
     <string name="untitled">Без названия</string>
+
+    <!-- Accessibility labels: read aloud, never drawn. -->
+    <string name="cd_menu">Разделы</string>
+    <string name="cd_favorites">Избранное</string>
+    <string name="cd_favorite_mark">В избранном</string>
+    <string name="cd_clear_search">Очистить поиск</string>
+    <string name="cd_sort">Порядок</string>
+    <string name="cd_expand">Развернуть</string>
+    <string name="cd_collapse">Свернуть</string>
+
+    <plurals name="entries_count">
+        <item quantity="one">%1$d запись</item>
+        <item quantity="few">%1$d записи</item>
+        <item quantity="many">%1$d записей</item>
+        <item quantity="other">%1$d записи</item>
+    </plurals>
 
     <!-- Entry -->
     <string name="new_entry">Новая запись</string>
@@ -42,6 +67,7 @@
     <string name="field_notes">Заметки</string>
     <string name="field_category">Категория</string>
     <string name="field_tags">Метки (через запятую)</string>
+    <string name="field_favorite">В избранном</string>
     <string name="save">Сохранить</string>
     <string name="cancel">Отмена</string>
     <string name="delete">Удалить</string>

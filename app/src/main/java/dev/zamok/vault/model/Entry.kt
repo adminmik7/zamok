@@ -1,6 +1,7 @@
 package dev.zamok.vault.model
 
 import kotlinx.serialization.Serializable
+import java.net.URI
 
 /**
  * One record in the vault.
@@ -29,3 +30,19 @@ data class Entry(
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 )
+
+/**
+ * The host of [url], without the scheme or a leading `www.`, or "" when there is no address.
+ *
+ * A computed property rather than a field, so nothing about the stored format changes. It is
+ * deliberately forgiving: people paste `example.com`, `https://example.com/login` and
+ * `www.example.com` and mean the same site by all three.
+ */
+val Entry.host: String
+    get() {
+        if (url.isBlank()) return ""
+        // A host only comes back when the address carries a scheme; otherwise the leading part.
+        val parsed = runCatching { URI(url).host }.getOrNull()
+        val host = parsed ?: url.substringBefore('/').substringAfter("://")
+        return host.removePrefix("www.")
+    }

@@ -42,6 +42,9 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.material3)
+    // Not pulled in by material3, but it is what the BOM pins the icons to, and the screen needs
+    // them: no hand-drawn glyphs, and no emoji, whose look changes from phone to phone.
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)

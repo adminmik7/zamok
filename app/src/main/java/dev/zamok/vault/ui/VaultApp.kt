@@ -1,49 +1,30 @@
 package dev.zamok.vault.ui
 
 import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,12 +50,14 @@ import dev.zamok.vault.model.Entry
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.time.LocalDate
 import kotlin.math.roundToInt
 
 /**
  * The whole app: one screen when locked, one when open. No navigation library — there is nowhere
- * to navigate, and the entry form is a dialog rather than a third destination.
+ * to navigate, and every other screen is a dialog on top of these two.
+ *
+ * The open screen is large enough to live in its own file; what stays here is the locked screen,
+ * the dialogs they both open, and the pieces only the dialogs use.
  */
 @Composable
 fun VaultApp(controller: VaultController) {
@@ -159,187 +142,6 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun VaultScreen(controller: VaultController, state: VaultUiState) {
-    var editing by remember { mutableStateOf<Entry?>(null) }
-    var adding by remember { mutableStateOf(false) }
-    var backupMenuOpen by remember { mutableStateOf(false) }
-    var restoreUri by remember { mutableStateOf<Uri?>(null) }
-    var auditOpen by remember { mutableStateOf(false) }
-    var csvExportOpen by remember { mutableStateOf(false) }
-
-    val context = LocalContext.current
-    val backupFileName = remember { "zamok-${LocalDate.now()}$BACKUP_FILE_EXTENSION" }
-
-    // The picker hands back a uri, and turning it into a stream stays here: the repository has no
-    // business knowing what a ContentResolver is.
-    val saveBackup = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(BACKUP_MIME_TYPE),
-    ) { uri -> if (uri != null) controller.export { context.openOutput(uri) } }
-
-    val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        // Picking a file only gets it asked about; nothing is read until the user confirms.
-        if (uri != null) restoreUri = uri
-    }
-
-    val saveCsv = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(CSV_MIME_TYPE),
-    ) { uri -> if (uri != null) controller.exportCsv { context.openOutput(uri) } }
-
-    val csvFileName = remember { "zamok-${LocalDate.now()}.csv" }
-
-    val pickCsv = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            // Importing adds rather than replaces, so there is nothing to warn about, and the
-            // counts are the whole outcome.
-            controller.importCsv({ context.openInput(uri) }) { result ->
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.csv_imported, result.entries.size, result.skipped),
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                actions = {
-                    if (controller.biometricSupported && !state.biometricEnrolled) {
-                        EnableBiometricAction(controller, enabled = !state.busy)
-                    }
-                    Box {
-                        TextButton(onClick = { backupMenuOpen = true }, enabled = !state.busy) {
-                            Text(stringResource(R.string.menu_more))
-                        }
-                        DropdownMenu(
-                            expanded = backupMenuOpen,
-                            onDismissRequest = { backupMenuOpen = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.audit_title)) },
-                                onClick = {
-                                    backupMenuOpen = false
-                                    auditOpen = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.backup_save)) },
-                                onClick = {
-                                    backupMenuOpen = false
-                                    saveBackup.launch(backupFileName)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.backup_restore)) },
-                                onClick = {
-                                    backupMenuOpen = false
-                                    // Any type: a picker cannot know a Zamok backup, and the
-                                    // file's own header is what decides whether it opens.
-                                    pickBackup.launch(arrayOf("*/*"))
-                                },
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.csv_export)) },
-                                onClick = {
-                                    backupMenuOpen = false
-                                    csvExportOpen = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.csv_import)) },
-                                onClick = {
-                                    backupMenuOpen = false
-                                    pickCsv.launch(arrayOf("*/*"))
-                                },
-                            )
-                        }
-                    }
-                    TextButton(onClick = { controller.lock() }) {
-                        Text(stringResource(R.string.lock))
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { adding = true }) {
-                Text(stringResource(R.string.add_entry))
-            }
-        },
-    ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            ErrorText(state.error, onDismiss = { controller.dismissError() })
-
-            if (state.entries.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.empty_vault),
-                    modifier = Modifier.padding(24.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.entries, key = { it.id }) { entry ->
-                        EntryRow(entry, onClick = { editing = entry })
-                    }
-                }
-            }
-        }
-    }
-
-    if (adding) {
-        EntryDialog(
-            initial = Entry(id = ""),
-            onDismiss = { adding = false },
-            onSave = { controller.add(it); adding = false },
-            onDelete = null,
-        )
-    }
-
-    editing?.let { entry ->
-        EntryDialog(
-            initial = entry,
-            onDismiss = { editing = null },
-            onSave = { controller.update(it); editing = null },
-            onDelete = { controller.delete(entry.id); editing = null },
-        )
-    }
-
-    restoreUri?.let { uri ->
-        RestoreDialog(
-            onDismiss = { restoreUri = null },
-            onRestore = { password ->
-                controller.restore({ context.openInput(uri) }, password)
-                restoreUri = null
-            },
-        )
-    }
-
-    if (auditOpen) {
-        AuditDialog(
-            entries = state.entries,
-            onOpenEntry = { entry ->
-                auditOpen = false
-                editing = entry
-            },
-            onDismiss = { auditOpen = false },
-        )
-    }
-
-    if (csvExportOpen) {
-        CsvExportDialog(
-            onDismiss = { csvExportOpen = false },
-            onConfirm = {
-                csvExportOpen = false
-                saveCsv.launch(csvFileName)
-            },
-        )
-    }
-}
-
 // ---- Biometric unlock ----
 //
 // The prompt lives here because it needs an Activity, which only the UI layer has. Everything it
@@ -370,7 +172,7 @@ private fun BiometricUnlockButton(controller: VaultController, enabled: Boolean)
  * Shared by the button and by the prompt that opens on its own when the locked screen appears, so
  * that both go through exactly the same path.
  */
-private fun promptBiometricUnlock(
+internal fun promptBiometricUnlock(
     activity: Activity,
     controller: VaultController,
     title: String,
@@ -406,43 +208,8 @@ private fun promptBiometricUnlock(
     }
 }
 
-@Composable
-private fun EnableBiometricAction(controller: VaultController, enabled: Boolean) {
-    val activity = LocalContext.current.findActivity()
-    val promptTitle = stringResource(R.string.biometric_prompt_title)
-    val cancelLabel = stringResource(R.string.cancel)
-
-    TextButton(
-        onClick = {
-            if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return@TextButton
-
-            val cipher = runCatching { KeystoreVaultKey.encryptionCipher() }.getOrNull()
-            if (cipher != null) {
-                BiometricPromptRunner.run(
-                    activity = activity,
-                    cipher = cipher,
-                    title = promptTitle,
-                    cancelLabel = cancelLabel,
-                    onUnlocked = { unlocked ->
-                        // The IV is read after the prompt rather than before: the Keystore sets it
-                        // when the cipher is initialised, and it must be stored with the blob.
-                        val iv = unlocked.iv
-                        controller.enableBiometricUnlock { vaultKey ->
-                            BiometricBlob.encode(iv, unlocked.doFinal(vaultKey))
-                        }
-                    },
-                    onFailure = {},
-                )
-            }
-        },
-        enabled = enabled,
-    ) {
-        Text(stringResource(R.string.biometric_enable))
-    }
-}
-
 /** `LocalContext` is not always the activity itself, so unwrap until one turns up. */
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
@@ -452,87 +219,14 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
  * Opens the document the user picked. It lives in the UI because a `ContentResolver` does, and the
  * vault only ever sees the stream.
  */
-private fun Context.openOutput(uri: Uri): OutputStream =
+internal fun Context.openOutput(uri: Uri): OutputStream =
     contentResolver.openOutputStream(uri) ?: throw IOException("Cannot write to $uri")
 
-private fun Context.openInput(uri: Uri): InputStream =
+internal fun Context.openInput(uri: Uri): InputStream =
     contentResolver.openInputStream(uri) ?: throw IOException("Cannot read $uri")
 
-/** Copies [text] for pasting. A one-time code expires in seconds, so it does not linger. */
-private fun Context.copyToClipboard(text: String) {
-    getSystemService(ClipboardManager::class.java)
-        ?.setPrimaryClip(ClipData.newPlainText("Zamok", text))
-}
-
 @Composable
-private fun EntryRow(entry: Entry, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clickable(onClick = onClick)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = entry.title.ifBlank { stringResource(R.string.untitled) },
-                style = MaterialTheme.typography.titleMedium,
-            )
-            if (entry.username.isNotBlank()) {
-                Text(entry.username, style = MaterialTheme.typography.bodySmall)
-            }
-            if (entry.totpSecret.isNotBlank()) {
-                TotpCode(entry.totpSecret)
-            }
-        }
-    }
-}
-
-/**
- * The entry's current one-time code, counting down to the next one.
- *
- * The one-second clock lives in here rather than in the screen, so a tick redraws this card and
- * nothing else. It is a Handler rather than a coroutine because the project has no coroutine
- * dependency, and this is the same shape its background work already uses.
- */
-@Composable
-private fun TotpCode(secretText: String) {
-    val secret = remember(secretText) { Totp.parse(secretText) } ?: return
-    val context = LocalContext.current
-    val copiedMessage = stringResource(R.string.totp_copied)
-
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    DisposableEffect(Unit) {
-        val handler = Handler(Looper.getMainLooper())
-        val tick = object : Runnable {
-            override fun run() {
-                now = System.currentTimeMillis()
-                handler.postDelayed(this, 1_000)
-            }
-        }
-        handler.postDelayed(tick, 1_000)
-        onDispose { handler.removeCallbacks(tick) }
-    }
-
-    val code = remember(secret, now) { secret.codeAt(now) }
-    val remaining = secret.secondsRemainingAt(now)
-
-    // A click target of its own: tapping the card opens the entry, tapping the code copies it.
-    Column(
-        modifier = Modifier.padding(top = 4.dp).clickable {
-            context.copyToClipboard(code)
-            Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
-        },
-    ) {
-        Text(
-            // Grouped to be read off the screen; the clipboard gets the bare digits.
-            text = code.chunked(if (code.length == 6) 3 else 4).joinToString(" "),
-            style = MaterialTheme.typography.titleMedium,
-            fontFamily = FontFamily.Monospace,
-        )
-        Text(
-            text = stringResource(R.string.totp_seconds_left, remaining),
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
-}
-
-@Composable
-private fun ErrorText(error: VaultError?, onDismiss: (() -> Unit)? = null) {
+internal fun ErrorText(error: VaultError?, onDismiss: (() -> Unit)? = null) {
     if (error == null) return
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -564,7 +258,7 @@ private fun ErrorText(error: VaultError?, onDismiss: (() -> Unit)? = null) {
  * password the user meant to keep.
  */
 @Composable
-private fun EntryDialog(
+internal fun EntryDialog(
     initial: Entry,
     onDismiss: () -> Unit,
     onSave: (Entry) -> Unit,
@@ -578,6 +272,7 @@ private fun EntryDialog(
     var category by remember { mutableStateOf(initial.category) }
     var tags by remember { mutableStateOf(initial.tags.joinToString(", ")) }
     var totpSecret by remember { mutableStateOf(initial.totpSecret) }
+    var favorite by remember { mutableStateOf(initial.favorite) }
     var passwordVisible by remember { mutableStateOf(false) }
     var generatorOpen by remember { mutableStateOf(false) }
 
@@ -625,6 +320,16 @@ private fun EntryDialog(
                     )
                 }
                 Field(R.string.field_notes, notes, singleLine = false) { notes = it }
+
+                // A password manager is where a password gets picked, so marking one matters more
+                // here than the field deserves on its own.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = favorite,
+                        onCheckedChange = { favorite = it },
+                    )
+                    Text(stringResource(R.string.field_favorite))
+                }
             }
         },
         confirmButton = {
@@ -640,6 +345,7 @@ private fun EntryDialog(
                             category = category,
                             tags = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() },
                             totpSecret = totpSecret,
+                            favorite = favorite,
                         )
                     )
                 },
@@ -764,10 +470,6 @@ private fun PasswordGeneratorDialog(onDismiss: () -> Unit, onUse: (String) -> Un
     )
 }
 
-private const val BACKUP_MIME_TYPE = "application/octet-stream"
-private const val BACKUP_FILE_EXTENSION = ".zmk"
-private const val CSV_MIME_TYPE = "text/csv"
-
 /**
  * Asks for the backup's own password before anything is read.
  *
@@ -776,7 +478,7 @@ private const val CSV_MIME_TYPE = "text/csv"
  * opened and decoded.
  */
 @Composable
-private fun RestoreDialog(onDismiss: () -> Unit, onRestore: (String) -> Unit) {
+internal fun RestoreDialog(onDismiss: () -> Unit, onRestore: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -814,7 +516,7 @@ private fun RestoreDialog(onDismiss: () -> Unit, onRestore: (String) -> Unit) {
  * and, more importantly, what it is not.
  */
 @Composable
-private fun AuditDialog(entries: List<Entry>, onOpenEntry: (Entry) -> Unit, onDismiss: () -> Unit) {
+internal fun AuditDialog(entries: List<Entry>, onOpenEntry: (Entry) -> Unit, onDismiss: () -> Unit) {
     // A pure function of the entries, so it runs when the dialog opens rather than being watched.
     val report = remember(entries) { PasswordAudit.report(entries) }
     val untitled = stringResource(R.string.untitled)
@@ -895,7 +597,7 @@ private fun reasonLabel(reason: WeakReason): Int = when (reason) {
  * dialog is the last moment at which that can still change the user's mind.
  */
 @Composable
-private fun CsvExportDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+internal fun CsvExportDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.csv_export_title)) },

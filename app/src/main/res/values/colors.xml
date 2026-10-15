@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The dark background is also the window background: without it the app flashes white between
+         being launched and the first frame being drawn, which is the one moment the screen is
+         supposed to look like it belongs to this app. -->
+    <color name="window_background">#101A28</color>
+</resources>
