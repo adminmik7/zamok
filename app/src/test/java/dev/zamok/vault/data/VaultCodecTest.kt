@@ -1,6 +1,7 @@
 package dev.zamok.vault.data
 
 import dev.zamok.vault.model.Entry
+import dev.zamok.vault.model.EntryField
 import dev.zamok.vault.model.Vault
 import kotlinx.serialization.SerializationException
 import org.junit.Assert.assertEquals
@@ -62,6 +63,28 @@ class VaultCodecTest {
         assertEquals("", decoded.title)
         assertFalse(decoded.favorite)
         assertTrue(decoded.tags.isEmpty())
+    }
+
+    @Test
+    fun `round trips a record's own fields`() {
+        val withFields = entry.copy(
+            fields = listOf(
+                EntryField("Номер", "4111 1111 1111 1111"),
+                EntryField("CVV", "123"),
+            )
+        )
+
+        val decoded = VaultCodec.decode(VaultCodec.encode(Vault(listOf(withFields)))).entries.single()
+
+        assertEquals(2, decoded.fields.size)
+        assertEquals("4111 1111 1111 1111", decoded.fields.first().value)
+    }
+
+    @Test
+    fun `reads a record written before fields existed`() {
+        val decoded = VaultCodec.decode("""{"entries":[{"id":"1"}]}""".toByteArray()).entries.single()
+
+        assertTrue(decoded.fields.isEmpty())
     }
 
     @Test

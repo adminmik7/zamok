@@ -33,10 +33,30 @@ data class Entry(
     val notes: String = "",
     val category: String = "",
     val tags: List<String> = emptyList(),
+    /**
+     * The record's own fields, for the kinds of record that have their own set of them.
+     *
+     * A list of labelled values rather than one named property per document type: a card and a
+     * passport want different things, and named properties would mean every entry carrying every
+     * type's fields, each needing its own plumbing, for values most entries never fill in.
+     */
+    val fields: List<EntryField> = emptyList(),
     val totpSecret: String = "",
     val favorite: Boolean = false,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
+)
+
+/**
+ * One labelled box on a record: what it is called, and what is in it.
+ *
+ * The label is stored text rather than an id from [EntryTypes], so a field imported from another
+ * program keeps whatever it was called there.
+ */
+@Serializable
+data class EntryField(
+    val label: String = "",
+    val value: String = "",
 )
 
 /**

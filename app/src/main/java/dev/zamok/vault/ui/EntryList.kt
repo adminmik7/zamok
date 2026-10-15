@@ -117,5 +117,8 @@ object EntryList {
             username.lowercase().contains(needle) ||
             url.lowercase().contains(needle) ||
             notes.lowercase().contains(needle) ||
-            tags.any { it.lowercase().contains(needle) }
+            tags.any { it.lowercase().contains(needle) } ||
+            // The record's own fields too: a card number's last digits are exactly what someone
+            // remembers about a card they are looking for.
+            fields.any { it.value.lowercase().contains(needle) }
 }

@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -335,6 +336,18 @@ internal fun EntryDialog(
     var passwordVisible by remember { mutableStateOf(false) }
     var generatorOpen by remember { mutableStateOf(false) }
 
+    // The boxes this kind of record brings with it, and what is in them. Kept in a map keyed by
+    // label rather than one state variable per field: the set of boxes changes when the type does,
+    // and this way a type the form has never seen needs no code here at all.
+    val context = LocalContext.current
+    val typeSpecs = EntryTypeUi.specs(type)
+    val typedValues = remember {
+        mutableStateMapOf<String, String>().apply {
+            initial.fields.forEach { field -> put(field.label, field.value) }
+        }
+    }
+    var valuesRevealed by remember { mutableStateOf(false) }
+
     // Recomputed while a new category is being typed, which costs nothing: a handful of strings.
     val categoryChoices = remember(categories, category) {
         EntryList.categoryOptions(categories, category)
@@ -387,6 +400,11 @@ internal fun EntryDialog(
                                     notes = notes,
                                     category = category,
                                     tags = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                                    fields = EntryTypeUi.fieldsToStore(
+                                        labels = typeSpecs.map { context.getString(it.label) },
+                                        values = typedValues,
+                                        existing = initial.fields,
+                                    ),
                                     totpSecret = totpSecret,
                                     favorite = favorite,
                                 )
@@ -412,6 +430,37 @@ internal fun EntryDialog(
                     onCategoryChange = { category = it },
                 )
                 Field(R.string.field_title, title) { title = it }
+
+                // Right under the name, because for a card or a passport these boxes are what the
+                // record is for. Putting them past eight generic fields would mean scrolling to
+                // find the number the record exists to hold.
+                if (typeSpecs.isNotEmpty()) {
+                    HorizontalDivider()
+                    if (typeSpecs.any { it.secret }) {
+                        TextButton(onClick = { valuesRevealed = !valuesRevealed }) {
+                            Text(
+                                stringResource(
+                                    if (valuesRevealed) R.string.hide_password else R.string.show_password
+                                )
+                            )
+                        }
+                    }
+                    typeSpecs.forEach { spec ->
+                        val label = stringResource(spec.label)
+                        Field(
+                            label = label,
+                            value = typedValues[label].orEmpty(),
+                            visualTransformation = if (spec.secret && !valuesRevealed) {
+                                PasswordVisualTransformation()
+                            } else {
+                                VisualTransformation.None
+                            },
+                            onValueChange = { typedValues[label] = it },
+                        )
+                    }
+                    HorizontalDivider()
+                }
+
                 Field(R.string.field_username, username) { username = it }
                 Field(
                     label = R.string.field_password,
@@ -480,10 +529,33 @@ private fun Field(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     onValueChange: (String) -> Unit,
 ) {
+    Field(
+        label = stringResource(label),
+        value = value,
+        singleLine = singleLine,
+        visualTransformation = visualTransformation,
+        onValueChange = onValueChange,
+    )
+}
+
+/**
+ * The same box with a label that is already text, for the fields a record type brings with it.
+ *
+ * Those labels come out of the entry rather than out of a resource: what a card field is called is
+ * something the stored entry decides, so the text is looked up before it gets here.
+ */
+@Composable
+private fun Field(
+    label: String,
+    value: String,
+    singleLine: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    onValueChange: (String) -> Unit,
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(stringResource(label)) },
+        label = { Text(label) },
         singleLine = singleLine,
         visualTransformation = visualTransformation,
         modifier = Modifier.fillMaxWidth(),

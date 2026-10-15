@@ -25,6 +25,7 @@ class EntryListTest {
         favorite: Boolean = false,
         updatedAt: Long = 0L,
         type: String = EntryTypes.PASSWORD,
+        fields: List<EntryField> = emptyList(),
     ) = Entry(
         id = id,
         title = title,
@@ -37,9 +38,20 @@ class EntryListTest {
         favorite = favorite,
         updatedAt = updatedAt,
         type = type,
+        fields = fields,
     )
 
     // ---- search ----
+
+    @Test
+    fun `search looks in a card number too`() {
+        val card = entry(id = "1", title = "Карта", fields = listOf(EntryField("Номер", "4111111111111111")))
+        val other = entry(id = "2", title = "Почта")
+
+        val found = EntryList.apply(listOf(card, other), query = "4111111111111111")
+
+        assertEquals(listOf("1"), found.map { it.id })
+    }
 
     @Test
     fun `search looks in the title, the login and the address`() {

@@ -65,6 +65,20 @@
     <string name="field_password">Пароль</string>
     <string name="field_url">Адрес</string>
     <string name="field_notes">Заметки</string>
+
+    <!-- The record's own fields, per type. The text is what the entry stores, so changing it
+         renames the field on records that already carry it. -->
+    <string name="field_card_number">Номер</string>
+    <string name="field_card_holder">Владелец</string>
+    <string name="field_card_expiry">Срок действия</string>
+    <string name="field_card_cvv">CVV</string>
+    <string name="field_card_pin">PIN</string>
+    <string name="field_passport_series">Серия</string>
+    <string name="field_passport_number">Номер</string>
+    <string name="field_passport_issued_by">Кем выдан</string>
+    <string name="field_passport_issued_on">Дата выдачи</string>
+    <string name="field_passport_department_code">Код подразделения</string>
+    <string name="field_passport_valid_until">Действителен до</string>
     <string name="field_category">Категория</string>
     <string name="category_new">Новая категория…</string>
     <string name="category_new_hint">Название категории</string>
