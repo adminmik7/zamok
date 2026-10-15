@@ -19,8 +19,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # android-actions/setup-android is deliberately NOT used. It runs `sdkmanager tools`,
+      # and that package no longer exists in the SDK repository, so the step always fails.
+      # The ubuntu-latest image already ships a full SDK with licences accepted, and AGP
+      # downloads any missing platform itself.
+      - name: Show the preinstalled SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
+          ls "$ANDROID_HOME/licenses" || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
