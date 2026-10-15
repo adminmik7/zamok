@@ -101,6 +101,25 @@ class VaultFileTest {
     }
 
     @Test
+    fun `a payload from another vault does not open`() {
+        val mine = VaultFile.create(PASSWORD.toCharArray(), payload, ITERATIONS)
+        val other = VaultFile.create(PASSWORD.toCharArray(), "другой".toByteArray(), ITERATIONS)
+
+        // Both vaults use the same password, so only the salt, the wrapped key and the vault key
+        // separate them. Splice my payload into the other vault; nothing must come of it.
+        val spliced = VaultFile.parse(
+            VaultLayout.header(other.iterations, other.salt) + other.wrappedKey + mine.payload
+        )
+
+        val session = spliced.unlock(PASSWORD.toCharArray())
+        try {
+            assertThrows(VaultCryptoException::class.java) { session.readPayload() }
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
     fun `writePayload persists changes readable under the same password`() {
         val file = VaultFile.create(PASSWORD.toCharArray(), payload, ITERATIONS)
         val updated = """{"entries":[{"title":"github"}]}""".toByteArray()
