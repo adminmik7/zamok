@@ -9,6 +9,23 @@ android {
     namespace = "dev.zamok.vault"
     compileSdk = 36
 
+    // The debug key is pinned to a file in the project when one is there, instead of AGP's default
+    // under the user's home directory. CI caches exactly this one file, and a stable key is what
+    // lets a new build install over the previous one: Android refuses a differently signed
+    // package, and the only way through is to uninstall — which, with system backup off, takes the
+    // vault with it. No file (a fresh clone) simply falls back to AGP's own key.
+    signingConfigs {
+        val pinned = rootProject.file("debug.keystore")
+        if (pinned.exists()) {
+            getByName("debug") {
+                storeFile = pinned
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "dev.zamok.vault"
         minSdk = 26

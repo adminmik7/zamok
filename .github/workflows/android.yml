@@ -39,11 +39,24 @@ jobs:
       # previous one failed with "App not installed" and the app had to be uninstalled first —
       # which, with backups off, also threw the vault away. One stable key makes an update an
       # ordinary update.
+      #
+      # The path is inside the workspace and is the same one app/build.gradle.kts pins, rather than
+      # whichever directory AGP would have picked on this machine.
       - name: Cache the debug keystore
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
+          path: debug.keystore
           key: android-debug-keystore-v1
+
+      # Only ever runs while the cache is cold, so the key outlives every later run.
+      - name: Create the debug keystore if it is not cached yet
+        run: |
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v -keystore debug.keystore \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
 
       - name: Test and build debug APK
         run: gradle testDebugUnitTest assembleDebug --stacktrace

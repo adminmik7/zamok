@@ -18,6 +18,7 @@ captures/
 # Keystores — never commit signing material
 *.jks
 *.keystore
+debug.keystore
 keystore.properties
 
 # Credentials — never commit tokens or passwords
