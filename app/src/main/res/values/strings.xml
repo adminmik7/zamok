@@ -57,7 +57,7 @@
     <string name="class_symbols">Символы (!@#$…)</string>
 
     <!-- Backup -->
-    <string name="backup_menu">Копия</string>
+    <string name="menu_more">Ещё</string>
     <string name="backup_save">Сохранить копию</string>
     <string name="backup_restore">Восстановить из копии</string>
     <string name="backup_password">Пароль копии</string>
@@ -68,4 +68,16 @@
     <string name="totp_invalid">Ключ не распознан. Нужен ключ в Base32 (A-Z, 2-7) или ссылка otpauth://totp/…</string>
     <string name="totp_copied">Код скопирован</string>
     <string name="totp_seconds_left">осталось %1$d с</string>
+
+    <!-- Password audit -->
+    <string name="audit_title">Проверка паролей</string>
+    <string name="audit_clean">Слабых и повторяющихся паролей нет.</string>
+    <string name="audit_reused">Один пароль на несколько записей</string>
+    <string name="audit_weak">Слабые пароли</string>
+    <string name="audit_reason_common">известный пароль</string>
+    <string name="audit_reason_short">короче 8 символов</string>
+    <string name="audit_reason_repeated">один символ повторяется</string>
+    <string name="audit_reason_sequence">идёт по порядку (1234, qwerty)</string>
+    <string name="audit_reason_personal">содержит название, логин или адрес</string>
+    <string name="audit_hint">Это простые правила, а не оценка стойкости: пусто в списке значит «ни одно из правил не сработало», а не «пароль надёжен».</string>
 </resources>

@@ -62,6 +62,8 @@ import dev.zamok.vault.crypto.CharClass
 import dev.zamok.vault.crypto.KeystoreVaultKey
 import dev.zamok.vault.crypto.PasswordGenerator
 import dev.zamok.vault.crypto.Totp
+import dev.zamok.vault.data.PasswordAudit
+import dev.zamok.vault.data.WeakReason
 import dev.zamok.vault.model.Entry
 import java.io.IOException
 import java.io.InputStream
@@ -163,6 +165,7 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
     var adding by remember { mutableStateOf(false) }
     var backupMenuOpen by remember { mutableStateOf(false) }
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    var auditOpen by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val backupFileName = remember { "zamok-${LocalDate.now()}$BACKUP_FILE_EXTENSION" }
@@ -188,12 +191,19 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
                     }
                     Box {
                         TextButton(onClick = { backupMenuOpen = true }, enabled = !state.busy) {
-                            Text(stringResource(R.string.backup_menu))
+                            Text(stringResource(R.string.menu_more))
                         }
                         DropdownMenu(
                             expanded = backupMenuOpen,
                             onDismissRequest = { backupMenuOpen = false },
                         ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.audit_title)) },
+                                onClick = {
+                                    backupMenuOpen = false
+                                    auditOpen = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.backup_save)) },
                                 onClick = {
@@ -268,6 +278,17 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
                 controller.restore({ context.openInput(uri) }, password)
                 restoreUri = null
             },
+        )
+    }
+
+    if (auditOpen) {
+        AuditDialog(
+            entries = state.entries,
+            onOpenEntry = { entry ->
+                auditOpen = false
+                editing = entry
+            },
+            onDismiss = { auditOpen = false },
         )
     }
 }
@@ -735,4 +756,86 @@ private fun RestoreDialog(onDismiss: () -> Unit, onRestore: (String) -> Unit) {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
+}
+
+/**
+ * What the rules make of the passwords already in the vault.
+ *
+ * Only entries with something wrong are listed, and tapping one opens it for editing: a warning
+ * that does not lead to the thing to change is just noise. The hint at the bottom says what this is
+ * and, more importantly, what it is not.
+ */
+@Composable
+private fun AuditDialog(entries: List<Entry>, onOpenEntry: (Entry) -> Unit, onDismiss: () -> Unit) {
+    // A pure function of the entries, so it runs when the dialog opens rather than being watched.
+    val report = remember(entries) { PasswordAudit.report(entries) }
+    val untitled = stringResource(R.string.untitled)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.audit_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (report.isEmpty) {
+                    Text(stringResource(R.string.audit_clean))
+                }
+
+                if (report.reused.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.audit_reused),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    for (group in report.reused) {
+                        Text(
+                            // One group can be several entries; opening the first of them is enough
+                            // of a lead to work out what to split apart.
+                            text = group.entries.joinToString(", ") { it.title.ifBlank { untitled } },
+                            modifier = Modifier.clickable { onOpenEntry(group.entries.first()) },
+                        )
+                    }
+                }
+
+                if (report.weak.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.audit_weak),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    for (finding in report.weak) {
+                        Column(modifier = Modifier.clickable { onOpenEntry(finding.entry) }) {
+                            Text(
+                                text = finding.entry.title.ifBlank { untitled },
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                // `map` is inline, so resolving the labels here is allowed.
+                                text = finding.reasons.map { stringResource(reasonLabel(it)) }
+                                    .joinToString(", "),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.audit_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        },
+    )
+}
+
+private fun reasonLabel(reason: WeakReason): Int = when (reason) {
+    WeakReason.COMMON -> R.string.audit_reason_common
+    WeakReason.TOO_SHORT -> R.string.audit_reason_short
+    WeakReason.REPEATED -> R.string.audit_reason_repeated
+    WeakReason.SEQUENCE -> R.string.audit_reason_sequence
+    WeakReason.PERSONAL -> R.string.audit_reason_personal
 }
