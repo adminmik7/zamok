@@ -1,10 +1,15 @@
 package dev.zamok.vault.ui
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -37,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +61,7 @@ import dev.zamok.vault.crypto.BiometricBlob
 import dev.zamok.vault.crypto.CharClass
 import dev.zamok.vault.crypto.KeystoreVaultKey
 import dev.zamok.vault.crypto.PasswordGenerator
+import dev.zamok.vault.crypto.Totp
 import dev.zamok.vault.model.Entry
 import java.io.IOException
 import java.io.InputStream
@@ -383,6 +390,12 @@ private fun Context.openOutput(uri: Uri): OutputStream =
 private fun Context.openInput(uri: Uri): InputStream =
     contentResolver.openInputStream(uri) ?: throw IOException("Cannot read $uri")
 
+/** Copies [text] for pasting. A one-time code expires in seconds, so it does not linger. */
+private fun Context.copyToClipboard(text: String) {
+    getSystemService(ClipboardManager::class.java)
+        ?.setPrimaryClip(ClipData.newPlainText("Zamok", text))
+}
+
 @Composable
 private fun EntryRow(entry: Entry, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clickable(onClick = onClick)) {
@@ -394,7 +407,59 @@ private fun EntryRow(entry: Entry, onClick: () -> Unit) {
             if (entry.username.isNotBlank()) {
                 Text(entry.username, style = MaterialTheme.typography.bodySmall)
             }
+            if (entry.totpSecret.isNotBlank()) {
+                TotpCode(entry.totpSecret)
+            }
         }
+    }
+}
+
+/**
+ * The entry's current one-time code, counting down to the next one.
+ *
+ * The one-second clock lives in here rather than in the screen, so a tick redraws this card and
+ * nothing else. It is a Handler rather than a coroutine because the project has no coroutine
+ * dependency, and this is the same shape its background work already uses.
+ */
+@Composable
+private fun TotpCode(secretText: String) {
+    val secret = remember(secretText) { Totp.parse(secretText) } ?: return
+    val context = LocalContext.current
+    val copiedMessage = stringResource(R.string.totp_copied)
+
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    DisposableEffect(Unit) {
+        val handler = Handler(Looper.getMainLooper())
+        val tick = object : Runnable {
+            override fun run() {
+                now = System.currentTimeMillis()
+                handler.postDelayed(this, 1_000)
+            }
+        }
+        handler.postDelayed(tick, 1_000)
+        onDispose { handler.removeCallbacks(tick) }
+    }
+
+    val code = remember(secret, now) { secret.codeAt(now) }
+    val remaining = secret.secondsRemainingAt(now)
+
+    // A click target of its own: tapping the card opens the entry, tapping the code copies it.
+    Column(
+        modifier = Modifier.padding(top = 4.dp).clickable {
+            context.copyToClipboard(code)
+            Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
+        },
+    ) {
+        Text(
+            // Grouped to be read off the screen; the clipboard gets the bare digits.
+            text = code.chunked(if (code.length == 6) 3 else 4).joinToString(" "),
+            style = MaterialTheme.typography.titleMedium,
+            fontFamily = FontFamily.Monospace,
+        )
+        Text(
+            text = stringResource(R.string.totp_seconds_left, remaining),
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
@@ -444,6 +509,7 @@ private fun EntryDialog(
     var notes by remember { mutableStateOf(initial.notes) }
     var category by remember { mutableStateOf(initial.category) }
     var tags by remember { mutableStateOf(initial.tags.joinToString(", ")) }
+    var totpSecret by remember { mutableStateOf(initial.totpSecret) }
     var passwordVisible by remember { mutableStateOf(false) }
     var generatorOpen by remember { mutableStateOf(false) }
 
@@ -480,6 +546,16 @@ private fun EntryDialog(
                 Field(R.string.field_url, url) { url = it }
                 Field(R.string.field_category, category) { category = it }
                 Field(R.string.field_tags, tags) { tags = it }
+                Field(R.string.field_totp, totpSecret) { totpSecret = it }
+                if (totpSecret.isNotBlank() && Totp.parse(totpSecret) == null) {
+                    // Said here rather than by a missing code in the list later: a key that was
+                    // pasted wrong would otherwise just quietly never produce a code.
+                    Text(
+                        text = stringResource(R.string.totp_invalid),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 Field(R.string.field_notes, notes, singleLine = false) { notes = it }
             }
         },
@@ -495,6 +571,7 @@ private fun EntryDialog(
                             notes = notes,
                             category = category,
                             tags = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                            totpSecret = totpSecret,
                         )
                     )
                 },
