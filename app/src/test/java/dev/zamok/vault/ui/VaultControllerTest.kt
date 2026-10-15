@@ -4,12 +4,10 @@ import dev.zamok.vault.data.VaultRepository
 import dev.zamok.vault.data.VaultStore
 import dev.zamok.vault.model.Entry
 import java.io.File
-import java.io.IOException
 import java.util.concurrent.Executor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -160,12 +158,11 @@ class VaultControllerTest {
         File(temporaryFolder.root, "vault.zmk").mkdirs()
 
         val second = controller()
-        val failure = assertThrows(Exception::class.java) {
-            second.unlockWithBiometrics { it.copyOf() }
-        }
+        second.unlockWithBiometrics { it.copyOf() }
 
-        assertTrue(failure is IOException)
-        second.lock()
+        // The unlock failed — the vault is a directory — but that says nothing about the key, so
+        // the copy stays and the fingerprint button is still offered.
+        assertFalse(second.state.unlocked)
         assertTrue(second.state.biometricEnrolled)
     }
 
