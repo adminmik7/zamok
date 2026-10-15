@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.zamok.vault.crypto.VaultCryptoException
+import dev.zamok.vault.data.CsvImport
 import dev.zamok.vault.data.VaultRepository
 import dev.zamok.vault.model.Entry
 import java.io.IOException
@@ -101,6 +102,24 @@ class VaultController(
     fun restore(open: () -> InputStream, password: String) =
         submit { open().use { repository.restore(it, password.toCharArray()) } }
 
+    // ---- Spreadsheet ----
+    //
+    // The opposite of a backup: a backup is ciphertext that only Zamok can read, and this is plain
+    // text meant to be read elsewhere. The warning that goes with it belongs to the screen, which is
+    // what shows it before the file is even picked.
+
+    /** Writes every password to [open]'s stream as CSV, in the clear. */
+    fun exportCsv(open: () -> OutputStream) = submit { open().use { repository.exportCsvTo(it) } }
+
+    /**
+     * Adds the entries in [open]'s stream. [onImported] runs on the main thread with what happened.
+     *
+     * The counts come back through a callback rather than through the state: they are a one-off
+     * message, and a screen has nothing to redraw them from.
+     */
+    fun importCsv(open: () -> InputStream, onImported: (CsvImport) -> Unit) =
+        submit(onSuccess = onImported) { open().use { repository.importCsv(it) } }
+
     // ---- Biometric unlock ----
     //
     // The prompt itself runs in the UI layer, which is what has an Activity. What arrives here is
@@ -136,7 +155,14 @@ class VaultController(
         biometricEnrolled = repository.biometricUnlockEnrolled(),
     )
 
-    private fun submit(action: () -> Unit) {
+    /**
+     * Runs [action] off the UI thread and applies its result on the main one.
+     *
+     * [onSuccess] is handed whatever the action returned, on the main thread, for the few
+     * operations whose result is a one-off message rather than something a screen redraws from. It
+     * comes first so that every `submit { ... }` call keeps its shape.
+     */
+    private fun <T> submit(onSuccess: (T) -> Unit = { _ -> }, action: () -> T) {
         // A second tap while the first is still running would run the KDF twice over the same state.
         if (state.busy) return
         state = state.copy(busy = true, error = null)
@@ -145,13 +171,14 @@ class VaultController(
             val outcome = runCatching(action)
             val failure = outcome.exceptionOrNull()
             main.execute {
-                state = if (failure == null) {
-                    snapshot()
+                if (failure == null) {
+                    state = snapshot()
+                    onSuccess(outcome.getOrThrow())
                 } else {
                     // Leave the entries alone: the change never reached disk, so showing it would
                     // promise the user something the vault does not hold. The enrolment flag is
                     // re-read, because a failed biometric unlock removes the stored copy.
-                    state.copy(
+                    state = state.copy(
                         busy = false,
                         error = failure.toVaultError(),
                         biometricEnrolled = repository.biometricUnlockEnrolled(),

@@ -34,6 +34,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -166,6 +167,7 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
     var backupMenuOpen by remember { mutableStateOf(false) }
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
     var auditOpen by remember { mutableStateOf(false) }
+    var csvExportOpen by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val backupFileName = remember { "zamok-${LocalDate.now()}$BACKUP_FILE_EXTENSION" }
@@ -179,6 +181,26 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
     val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         // Picking a file only gets it asked about; nothing is read until the user confirms.
         if (uri != null) restoreUri = uri
+    }
+
+    val saveCsv = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(CSV_MIME_TYPE),
+    ) { uri -> if (uri != null) controller.exportCsv { context.openOutput(uri) } }
+
+    val csvFileName = remember { "zamok-${LocalDate.now()}.csv" }
+
+    val pickCsv = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            // Importing adds rather than replaces, so there is nothing to warn about, and the
+            // counts are the whole outcome.
+            controller.importCsv({ context.openInput(uri) }) { result ->
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.csv_imported, result.entries.size, result.skipped),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     Scaffold(
@@ -218,6 +240,21 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
                                     // Any type: a picker cannot know a Zamok backup, and the
                                     // file's own header is what decides whether it opens.
                                     pickBackup.launch(arrayOf("*/*"))
+                                },
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.csv_export)) },
+                                onClick = {
+                                    backupMenuOpen = false
+                                    csvExportOpen = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.csv_import)) },
+                                onClick = {
+                                    backupMenuOpen = false
+                                    pickCsv.launch(arrayOf("*/*"))
                                 },
                             )
                         }
@@ -289,6 +326,16 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
                 editing = entry
             },
             onDismiss = { auditOpen = false },
+        )
+    }
+
+    if (csvExportOpen) {
+        CsvExportDialog(
+            onDismiss = { csvExportOpen = false },
+            onConfirm = {
+                csvExportOpen = false
+                saveCsv.launch(csvFileName)
+            },
         )
     }
 }
@@ -719,6 +766,7 @@ private fun PasswordGeneratorDialog(onDismiss: () -> Unit, onUse: (String) -> Un
 
 private const val BACKUP_MIME_TYPE = "application/octet-stream"
 private const val BACKUP_FILE_EXTENSION = ".zmk"
+private const val CSV_MIME_TYPE = "text/csv"
 
 /**
  * Asks for the backup's own password before anything is read.
@@ -838,4 +886,25 @@ private fun reasonLabel(reason: WeakReason): Int = when (reason) {
     WeakReason.REPEATED -> R.string.audit_reason_repeated
     WeakReason.SEQUENCE -> R.string.audit_reason_sequence
     WeakReason.PERSONAL -> R.string.audit_reason_personal
+}
+
+/**
+ * Says out loud what a CSV export is, before it happens.
+ *
+ * The backup is the safe copy; this one can be read by anything that opens the file, and this
+ * dialog is the last moment at which that can still change the user's mind.
+ */
+@Composable
+private fun CsvExportDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.csv_export_title)) },
+        text = { Text(stringResource(R.string.csv_export_warning)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.csv_export_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }

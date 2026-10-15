@@ -14,8 +14,11 @@ import java.nio.file.StandardCopyOption
  * is there. Losing a vault means losing every password in it, so this is not a place to save code.
  *
  * `java.nio.file` is available from API 26, which is this app's `minSdk`.
+ *
+ * Open for a test to stand in and count how many times a change reaches the disk — the property
+ * that an import writes once rather than once per row is not visible from the outside.
  */
-class VaultStore(val file: File) {
+open class VaultStore(val file: File) {
 
     /** True when a vault is present and not empty. */
     fun exists(): Boolean = file.isFile && file.length() > 0L
@@ -27,7 +30,7 @@ class VaultStore(val file: File) {
     }
 
     /** Replaces the vault in one step. @throws IOException if it cannot be written. */
-    fun write(bytes: ByteArray) {
+    open fun write(bytes: ByteArray) {
         val directory = file.parentFile ?: throw IOException("Vault file has no directory: $file")
         if (!directory.isDirectory && !directory.mkdirs()) {
             throw IOException("Cannot create vault directory $directory")

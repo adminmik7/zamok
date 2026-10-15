@@ -89,14 +89,21 @@ class VaultRepository(
      * Adds [entry] and returns it as stored. The id and timestamps it arrives with are ignored:
      * this is the one place that decides them, so ids cannot collide by accident.
      */
-    fun add(entry: Entry): Entry {
+    fun add(entry: Entry): Entry = addAll(listOf(entry)).single()
+
+    /**
+     * Adds several entries with a single write to disk.
+     *
+     * Importing a file row by row would rewrite and re-encrypt the entire vault once per row.
+     * ids and timestamps are decided here, the same way [add] decides them.
+     */
+    fun addAll(newEntries: List<Entry>): List<Entry> {
+        if (newEntries.isEmpty()) return emptyList()
         val activeSession = requireSession()
         val timestamp = now()
-        val stored = entry.copy(
-            id = UUID.randomUUID().toString(),
-            createdAt = timestamp,
-            updatedAt = timestamp,
-        )
+        val stored = newEntries.map {
+            it.copy(id = UUID.randomUUID().toString(), createdAt = timestamp, updatedAt = timestamp)
+        }
         commit(activeSession, entries + stored)
         return stored
     }
@@ -198,6 +205,36 @@ class VaultRepository(
         // just went away and could never open this one.
         forgetBiometricUnlock()
         unlock(masterPassword)
+    }
+
+    // ---- Spreadsheet ----
+
+    /**
+     * Writes every entry to [out] as CSV, with the passwords in the clear.
+     *
+     * @throws IllegalStateException if the vault is locked — an export of nothing would be a file
+     * that looks like an empty vault.
+     * @throws java.io.IOException if the stream refuses the bytes.
+     */
+    fun exportCsvTo(out: OutputStream) {
+        requireSession()
+        out.write(VaultCsv.export(entries).toByteArray(Charsets.UTF_8))
+        out.flush()
+    }
+
+    /**
+     * Adds the entries in [input], which must be a CSV. Entries the vault already holds are skipped.
+     *
+     * Adding rather than replacing, so a bad file costs nothing but a look at the list.
+     *
+     * @throws java.io.IOException if the stream cannot be read.
+     */
+    fun importCsv(input: InputStream): CsvImport {
+        // The vault's current entries are read before anything is added: they are what the file is
+        // checked against for rows that are already here.
+        val import = VaultCsv.parse(input.readBytes().toString(Charsets.UTF_8), entries)
+        addAll(import.entries)
+        return import
     }
 
     // ---- Biometric unlock ----
