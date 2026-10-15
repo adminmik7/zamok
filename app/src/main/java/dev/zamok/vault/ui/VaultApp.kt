@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +63,21 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
     var password by remember { mutableStateOf("") }
     var visible by remember { mutableStateOf(false) }
     val creating = !state.vaultExists
+
+    val activity = LocalContext.current.findActivity()
+    val promptTitle = stringResource(R.string.biometric_prompt_title)
+    val cancelLabel = stringResource(R.string.cancel)
+    val biometricsReady = !creating && state.biometricEnrolled && controller.biometricSupported
+
+    // The fingerprint prompt opens on its own: a locked vault is entered with a finger, not by
+    // tapping a button first. Appearing on screen is what triggers it, and the key only changes
+    // when biometrics stop being offered — so a prompt the user just cancelled does not come
+    // straight back at them.
+    LaunchedEffect(biometricsReady) {
+        if (biometricsReady && activity != null) {
+            promptBiometricUnlock(activity, controller, promptTitle, cancelLabel)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -102,7 +118,7 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
             Text(stringResource(if (creating) R.string.create_vault else R.string.open_vault))
         }
 
-        if (!creating && state.biometricEnrolled && controller.biometricSupported) {
+        if (biometricsReady) {
             BiometricUnlockButton(controller, enabled = !state.busy)
             TextButton(onClick = { controller.forgetBiometricUnlock() }, enabled = !state.busy) {
                 Text(stringResource(R.string.biometric_forget))
@@ -192,38 +208,56 @@ private fun BiometricUnlockButton(controller: VaultController, enabled: Boolean)
 
     Button(
         onClick = {
-            if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return@Button
-
-            // The stored blob carries the IV, because the Keystore generated it and only the
-            // Keystore knows it. It is not secret, so reading it here is harmless.
-            val iv = controller.biometricIv()
-            val cipher = iv?.let { runCatching { KeystoreVaultKey.decryptionCipher(it) }.getOrNull() }
-
-            when {
-                iv != null && cipher == null ->
-                    // The Keystore key is gone — the platform destroys it when a fingerprint is
-                    // added — so the stored copy can never open anything again.
-                    controller.onBiometricKeyLost()
-
-                cipher != null -> BiometricPromptRunner.run(
-                    activity = activity,
-                    cipher = cipher,
-                    title = promptTitle,
-                    cancelLabel = cancelLabel,
-                    onUnlocked = { unlocked ->
-                        controller.unlockWithBiometrics { blob ->
-                            unlocked.doFinal(BiometricBlob.decode(blob).ciphertext)
-                        }
-                    },
-                    // A cancelled or failed prompt already told the user in the system dialog.
-                    onFailure = {},
-                )
+            if (activity != null) {
+                promptBiometricUnlock(activity, controller, promptTitle, cancelLabel)
             }
         },
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(stringResource(R.string.biometric_unlock))
+    }
+}
+
+/**
+ * Shows the fingerprint prompt and opens the vault when it succeeds.
+ *
+ * Shared by the button and by the prompt that opens on its own when the locked screen appears, so
+ * that both go through exactly the same path.
+ */
+private fun promptBiometricUnlock(
+    activity: Activity,
+    controller: VaultController,
+    title: String,
+    cancelLabel: String,
+) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+
+    // The stored blob carries the IV, because the Keystore generated it and only the Keystore
+    // knows it. It is not secret, so reading it here is harmless. The read is guarded because this
+    // now runs on its own when the screen appears: a copy that vanished or got corrupted must
+    // leave the password field working, not take the app down from inside a composable.
+    val iv = runCatching { controller.biometricIv() }.getOrNull()
+    val cipher = iv?.let { runCatching { KeystoreVaultKey.decryptionCipher(it) }.getOrNull() }
+
+    when {
+        // The Keystore key is gone — the platform destroys it when a fingerprint is added — so the
+        // stored copy can never open anything again.
+        iv != null && cipher == null -> controller.onBiometricKeyLost()
+
+        cipher != null -> BiometricPromptRunner.run(
+            activity = activity,
+            cipher = cipher,
+            title = title,
+            cancelLabel = cancelLabel,
+            onUnlocked = { unlocked ->
+                controller.unlockWithBiometrics { blob ->
+                    unlocked.doFinal(BiometricBlob.decode(blob).ciphertext)
+                }
+            },
+            // A cancelled or failed prompt already told the user in the system dialog.
+            onFailure = {},
+        )
     }
 }
 
