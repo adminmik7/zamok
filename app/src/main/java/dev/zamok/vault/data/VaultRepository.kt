@@ -183,16 +183,22 @@ class VaultRepository(
         val vaultKey = try {
             open(biometricStore.read())
         } catch (failure: GeneralSecurityException) {
-            // The Keystore key was invalidated (a fingerprint was added) or the copy belongs to
-            // another vault. It can never work again, and keeping it would keep offering an unlock
-            // that is guaranteed to fail.
+            // The Keystore refused to release the key — it was invalidated, usually because a new
+            // fingerprint was enrolled. The copy can never be opened again.
             forgetBiometricUnlock()
             throw failure
         }
+
         try {
             val openedFile = VaultFile.parse(store.read())
-            val openedSession = openedFile.unlockWithVaultKey(vaultKey)
-            adopt(openedFile, openedSession)
+            adopt(openedFile, openedFile.unlockWithVaultKey(vaultKey))
+        } catch (failure: VaultCryptoException) {
+            // The key came out of the Keystore but does not match this vault's payload: the copy
+            // is for an older vault. Keeping it would leave the screen offering an unlock that is
+            // guaranteed to fail. A plain I/O failure is different — the copy may still be good —
+            // and that path rethrows without dropping anything.
+            forgetBiometricUnlock()
+            throw failure
         } finally {
             vaultKey.wipe()
         }

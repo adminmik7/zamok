@@ -4,10 +4,12 @@ import dev.zamok.vault.data.VaultRepository
 import dev.zamok.vault.data.VaultStore
 import dev.zamok.vault.model.Entry
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.Executor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -143,6 +145,28 @@ class VaultControllerTest {
         controller.dismissError()
 
         assertNull(controller.state.error)
+    }
+
+    @Test
+    fun `an unreadable vault keeps the biometric copy`() {
+        val first = controller()
+        first.create(password)
+        first.enableBiometricUnlock { it.copyOf() }
+        first.lock()
+
+        // The vault becomes unreadable: a directory where the file should be. The copy is still
+        // good, only the vault cannot be read right now, so it must survive.
+        File(temporaryFolder.root, "vault.zmk").delete()
+        File(temporaryFolder.root, "vault.zmk").mkdirs()
+
+        val second = controller()
+        val failure = assertThrows(Exception::class.java) {
+            second.unlockWithBiometrics { it.copyOf() }
+        }
+
+        assertTrue(failure is IOException)
+        second.lock()
+        assertTrue(second.state.biometricEnrolled)
     }
 
     @Test

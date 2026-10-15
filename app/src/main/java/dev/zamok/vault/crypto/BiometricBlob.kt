@@ -24,10 +24,14 @@ internal object BiometricBlob {
 
     private const val MAGIC_BYTES = 9
     private const val HEADER_BYTES = MAGIC_BYTES + 1 + 1
-    private const val TAG_BYTES = 16
 
-    /** A short IV, an empty payload or a missing tag are all impossible for a real blob. */
-    const val MIN_BYTES = HEADER_BYTES + 1 + TAG_BYTES
+    /**
+     * A header, a non-empty IV and at least one byte of ciphertext.
+     *
+     * No minimum ciphertext length is imposed beyond that: whether the bytes form a valid sealed
+     * key is for GCM to say, and a short ciphertext fails authentication on its own.
+     */
+    const val MIN_BYTES = HEADER_BYTES + 1 + 1
 
     fun encode(iv: ByteArray, ciphertext: ByteArray): ByteArray {
         require(iv.isNotEmpty() && iv.size <= 255) { "IV must be 1..255 bytes, was ${iv.size}" }
@@ -58,7 +62,7 @@ internal object BiometricBlob {
         }
 
         val ivLength = bytes[MAGIC_BYTES + 1].toInt() and 0xFF
-        if (ivLength == 0 || bytes.size < HEADER_BYTES + ivLength + TAG_BYTES) {
+        if (ivLength == 0 || bytes.size < HEADER_BYTES + ivLength + 1) {
             throw VaultCryptoException("Biometric key is truncated")
         }
 

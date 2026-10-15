@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION") // FingerprintManager is the only API that exists on Android 9.
+
 package dev.zamok.vault.ui
 
 import android.content.Context
@@ -27,9 +29,7 @@ object BiometricSupport {
         }
 
         // API 28 has no BiometricManager. FingerprintManager is deprecated but is what exists there.
-        @Suppress("DEPRECATION")
         val fingerprint = context.getSystemService(FingerprintManager::class.java) ?: return false
-        @Suppress("DEPRECATION")
         return fingerprint.isHardwareDetected && fingerprint.hasEnrolledFingerprints()
     }
 }
