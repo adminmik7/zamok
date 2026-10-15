@@ -45,9 +45,11 @@ internal object BiometricPromptRunner {
                     }
 
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        // Backing out is not an error worth a message; anything else is.
+                        // Backing out is not an error worth a message; anything else is. Only the
+                        // two cancellation codes the platform class actually publishes are checked
+                        // — the negative button reports one of these.
                         if (errorCode == BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED ||
-                            errorCode == BiometricPrompt.BIOMETRIC_ERROR_NEGATIVE_BUTTON
+                            errorCode == BiometricPrompt.BIOMETRIC_ERROR_CANCELED
                         ) {
                             onFailure(null)
                         } else {
