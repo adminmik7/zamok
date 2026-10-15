@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The dark background is also the window background: without it the app flashes white between
-         being launched and the first frame being drawn, which is the one moment the screen is
-         supposed to look like it belongs to this app. -->
-    <color name="window_background">#101A28</color>
+    <!-- The launcher icon's background, and the colour of the keyhole "cut" out of the padlock.
+         The icon is an adaptive icon, so this is a full bleed colour and the launcher applies its
+         own mask: on a phone that masks to a circle it looks like the reference, and on one that
+         masks to a rounded square it stays red with the same padlock. -->
+    <color name="ic_launcher_background">#EF4444</color>
 </resources>

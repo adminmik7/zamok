@@ -1,6 +1,7 @@
 package dev.zamok.vault.ui
 
 import dev.zamok.vault.model.Entry
+import dev.zamok.vault.model.EntryField
 import dev.zamok.vault.model.EntryTypes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The padlock, drawn as the foreground layer of the launcher icon.
+
+  Everything sits inside the middle 66 of the 108 unit square: an adaptive icon's outer third is
+  reserved for the launcher's mask and can be clipped, so keeping the drawing inside that box is
+  what stops the shackle losing its head on a circular mask.
+
+  The keyhole is filled with the background colour rather than being a real hole, which is the only
+  way a vector drawable can cut a shape out of another one. It therefore matches the background
+  layer exactly, and both read the same colour resource so they cannot drift apart.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- The shackle: a stroked arch, drawn first so the body covers where its legs end. -->
+    <path
+        android:pathData="M42,50 V45 a12,12 0 0 1 24,0 V50"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round" />
+
+    <!-- The body. -->
+    <path
+        android:pathData="M37,44 h34 a7,7 0 0 1 7,7 v20 a7,7 0 0 1 -7,7 h-34 a7,7 0 0 1 -7,-7 v-20 a7,7 0 0 1 7,-7 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- The keyhole: a circle over a rounded slot. -->
+    <path
+        android:pathData="M54,52 a5,5 0 1 1 0,10 a5,5 0 1 1 0,-10 z M51.5,61 h5 v8 a2.5,2.5 0 0 1 -5,0 z"
+        android:fillColor="@color/ic_launcher_background" />
+</vector>
