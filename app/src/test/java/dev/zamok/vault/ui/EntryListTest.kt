@@ -1,6 +1,7 @@
 package dev.zamok.vault.ui
 
 import dev.zamok.vault.model.Entry
+import dev.zamok.vault.model.EntryTypes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -23,6 +24,7 @@ class EntryListTest {
         tags: List<String> = emptyList(),
         favorite: Boolean = false,
         updatedAt: Long = 0L,
+        type: String = EntryTypes.PASSWORD,
     ) = Entry(
         id = id,
         title = title,
@@ -34,6 +36,7 @@ class EntryListTest {
         tags = tags,
         favorite = favorite,
         updatedAt = updatedAt,
+        type = type,
     )
 
     // ---- search ----
@@ -167,42 +170,58 @@ class EntryListTest {
         assertEquals(listOf("2", "3", "1"), shown.map { it.id })
     }
 
-    // ---- groups ----
+    // ---- record types ----
 
     @Test
-    fun `entries are grouped by category and the uncategorised ones come last`() {
+    fun `the type filter keeps only that type`() {
         val entries = listOf(
-            entry("1", title = "A", category = "Почта"),
-            entry("2", title = "B", category = "Банк"),
-            entry("3", title = "C"),
+            entry("1", title = "A", type = EntryTypes.PASSWORD),
+            entry("2", title = "B", type = EntryTypes.CARD),
+            entry("3", title = "C", type = EntryTypes.CARD),
         )
 
-        val groups = EntryList.group(entries)
-
-        assertEquals(listOf("Банк", "Почта", ""), groups.map { it.category })
+        assertEquals(listOf("2", "3"), EntryList.apply(entries, type = EntryTypes.CARD).map { it.id })
     }
 
     @Test
-    fun `a group holds its own entries, keeping the order they arrived in`() {
+    fun `the tabs list the types that occur, in the app's own order`() {
         val entries = listOf(
-            entry("1", title = "A", category = "Банк"),
-            entry("2", title = "B", category = "Банк"),
-            entry("3", title = "C"),
+            entry("1", title = "A", type = EntryTypes.NOTE),
+            entry("2", title = "B", type = EntryTypes.PASSWORD),
+            entry("3", title = "C", type = EntryTypes.NOTE),
         )
 
-        val groups = EntryList.group(entries)
-
-        assertEquals(listOf("1", "2"), groups.first().entries.map { it.id })
+        assertEquals(
+            listOf(EntryTypes.PASSWORD, EntryTypes.NOTE),
+            EntryList.typesPresent(entries),
+        )
     }
 
     @Test
-    fun `with no categories at all there is one group and it is the uncategorised one`() {
-        val entries = listOf(entry("1", title = "A"), entry("2", title = "B"))
+    fun `a type the app does not know is drawn as an ordinary record`() {
+        val entries = listOf(entry("1", title = "A", type = "из будущего"))
 
-        val groups = EntryList.group(entries)
+        assertEquals(listOf(EntryTypes.PASSWORD), EntryList.typesPresent(entries))
+        assertEquals(1, EntryList.apply(entries, type = EntryTypes.PASSWORD).size)
+    }
 
-        assertEquals(1, groups.size)
-        assertEquals("", groups.first().category)
+    @Test
+    fun `an entry written before types existed is an ordinary password`() {
+        // What an older vault file decodes to: the field is absent, so the default applies.
+        assertEquals(EntryTypes.PASSWORD, Entry("1").type)
+    }
+
+    @Test
+    fun `the type and the category filters apply together`() {
+        val entries = listOf(
+            entry("1", title = "A", type = EntryTypes.CARD, category = "Банк"),
+            entry("2", title = "B", type = EntryTypes.CARD, category = "Почта"),
+            entry("3", title = "C", type = EntryTypes.PASSWORD, category = "Банк"),
+        )
+
+        val shown = EntryList.apply(entries, type = EntryTypes.CARD, category = "Банк")
+
+        assertEquals(listOf("1"), shown.map { it.id })
     }
 
     // ---- a row ----
@@ -262,17 +281,6 @@ class EntryListTest {
             EntryList.avatarColorOf(entry("1", title = "Google")),
             EntryList.avatarColorOf(entry("2", title = "Netflix")),
         )
-    }
-
-    @Test
-    fun `the initial is the first letter, uppercased`() {
-        assertEquals("G", EntryList.initialOf(entry("1", title = "google")))
-        assertEquals("П", EntryList.initialOf(entry("2", title = "Почта")))
-    }
-
-    @Test
-    fun `an entry without a title still shows something`() {
-        assertEquals("?", EntryList.initialOf(entry("1", title = "   ")))
     }
 
     // ---- the category picker ----

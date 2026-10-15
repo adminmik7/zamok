@@ -18,6 +18,14 @@ import java.net.URI
 @Serializable
 data class Entry(
     val id: String,
+    /**
+     * What kind of record this is, an id from [EntryTypes].
+     *
+     * A plain string rather than an enum, and carrying a default: the file is written by whichever
+     * version of the app is installed, so a type this build has never heard of has to load and keep
+     * its value rather than fail the whole vault. [EntryTypes.normalise] decides how to draw one.
+     */
+    val type: String = EntryTypes.PASSWORD,
     val title: String = "",
     val username: String = "",
     val password: String = "",

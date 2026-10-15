@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,15 +31,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -48,6 +56,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -56,6 +66,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,20 +75,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.zamok.vault.R
 import dev.zamok.vault.crypto.BiometricBlob
 import dev.zamok.vault.crypto.KeystoreVaultKey
 import dev.zamok.vault.crypto.Totp
 import dev.zamok.vault.model.Entry
+import dev.zamok.vault.model.EntryTypes
 import java.time.LocalDate
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 
 private const val BACKUP_MIME_TYPE = "application/octet-stream"
@@ -87,11 +104,19 @@ private const val CSV_MIME_TYPE = "text/csv"
 /** Room at the bottom of the list, so the button that adds an entry never covers the last row. */
 private val FAB_CLEARANCE = 88.dp
 
+/** Where the four items of the bottom bar lead. */
+private enum class VaultTab(val label: Int, val icon: ImageVector) {
+    VAULT(R.string.nav_vault, Icons.Filled.Lock),
+    SECURITY(R.string.nav_security, Icons.Filled.Warning),
+    TOOLS(R.string.nav_tools, Icons.Filled.Settings),
+    SEARCH(R.string.nav_search, Icons.Filled.Search),
+}
+
 /**
  * The open vault.
  *
  * Everything the screen shows is derived here from [VaultUiState] by [EntryList], which is pure and
- * tested: what is left in this file is layout and the actions behind the drawer.
+ * tested: what is left in this file is layout and the actions behind the drawer and the bottom bar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,17 +128,21 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     val biometricTitle = stringResource(R.string.biometric_prompt_title)
     val cancelLabel = stringResource(R.string.cancel)
 
+    var tab by remember { mutableStateOf(VaultTab.VAULT) }
+    var typeTab by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Entry?>(null) }
     var adding by remember { mutableStateOf(false) }
+    var newType by remember { mutableStateOf(EntryTypes.PASSWORD) }
+    var typeMenuOpen by remember { mutableStateOf(false) }
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
-    var auditOpen by remember { mutableStateOf(false) }
     var csvExportOpen by remember { mutableStateOf(false) }
 
     var query by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var favoritesOnly by remember { mutableStateOf(false) }
     var order by remember { mutableStateOf(SortOrder.TITLE) }
-    var collapsed by remember { mutableStateOf(emptySet<String>()) }
+
+    val searchFocus = remember { FocusRequester() }
 
     // The pickers hand back a uri, and turning it into a stream stays here: the repository has no
     // business knowing what a ContentResolver is.
@@ -148,10 +177,17 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     }
 
     val categories = remember(state.entries) { EntryList.categoriesOf(state.entries) }
-    val shown = remember(state.entries, query, selectedCategory, favoritesOnly, order) {
-        EntryList.apply(state.entries, query, selectedCategory, favoritesOnly, order)
+    val types = remember(state.entries) { EntryList.typesPresent(state.entries) }
+    val shown = remember(state.entries, query, selectedCategory, favoritesOnly, order, typeTab) {
+        EntryList.apply(
+            entries = state.entries,
+            query = query,
+            category = selectedCategory,
+            favoritesOnly = favoritesOnly,
+            order = order,
+            type = typeTab,
+        )
     }
-    val groups = remember(shown) { EntryList.group(shown) }
 
     // Closing after a choice, since the drawer covers the result: leaving it open would look like
     // the screen is still busy. A new entry keeps it open — that is a list of things to add,
@@ -161,73 +197,63 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
         action()
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
-                )
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.all_entries)) },
-                    selected = !favoritesOnly,
-                    onClick = { choose { favoritesOnly = false } },
-                )
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.favorites)) },
-                    selected = favoritesOnly,
-                    onClick = { choose { favoritesOnly = true } },
-                )
-                DrawerDivider()
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.audit_title)) },
-                    selected = false,
-                    onClick = { choose { auditOpen = true } },
-                )
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.backup_save)) },
-                    selected = false,
-                    onClick = { choose { saveBackup.launch(backupFileName) } },
-                )
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.backup_restore)) },
-                    selected = false,
-                    onClick = { choose { pickBackup.launch(arrayOf("*/*")) } },
-                )
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.csv_export)) },
-                    selected = false,
-                    onClick = { choose { csvExportOpen = true } },
-                )
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.csv_import)) },
-                    selected = false,
-                    onClick = { choose { pickCsv.launch(arrayOf("*/*")) } },
-                )
-                if (controller.biometricSupported && !state.biometricEnrolled) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                    )
                     NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.biometric_enable)) },
+                        label = { Text(stringResource(R.string.all_entries)) },
+                        selected = !favoritesOnly && typeTab == null,
+                        onClick = { choose { favoritesOnly = false; typeTab = null } },
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.favorites)) },
+                        selected = favoritesOnly,
+                        onClick = { choose { favoritesOnly = true } },
+                    )
+                    DrawerDivider()
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.audit_title)) },
+                        selected = tab == VaultTab.SECURITY,
+                        onClick = { choose { tab = VaultTab.SECURITY } },
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.backup_save)) },
                         selected = false,
-                        onClick = {
-                            val activity = context.findActivity()
-                            choose { if (activity != null) enableBiometric(activity, controller, biometricTitle, cancelLabel) }
-                        },
+                        onClick = { choose { saveBackup.launch(backupFileName) } },
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.backup_restore)) },
+                        selected = false,
+                        onClick = { choose { pickBackup.launch(arrayOf("*/*")) } },
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.csv_export)) },
+                        selected = false,
+                        onClick = { choose { csvExportOpen = true } },
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.csv_import)) },
+                        selected = false,
+                        onClick = { choose { pickCsv.launch(arrayOf("*/*")) } },
+                    )
+                    DrawerDivider()
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.lock)) },
+                        selected = false,
+                        onClick = { controller.lock() },
                     )
                 }
-                DrawerDivider()
-                NavigationDrawerItem(
-                    label = { Text(stringResource(R.string.lock)) },
-                    selected = false,
-                    onClick = { controller.lock() },
-                )
-            }
-        },
-    ) {
-        Scaffold(
-            topBar = {
-                Column {
+            },
+        ) {
+            Scaffold(
+                topBar = {
                     TopAppBar(
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -257,84 +283,138 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                                 )
                             }
                         },
-                        actions = {
-                            IconButton(onClick = { favoritesOnly = !favoritesOnly }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Star,
-                                    contentDescription = stringResource(R.string.cd_favorites),
-                                    tint = if (favoritesOnly) {
-                                        MaterialTheme.colorScheme.tertiary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
-                            }
-                        },
                     )
-                    VaultSearchField(
-                        query = query,
-                        onQueryChange = { query = it },
-                        order = order,
-                        onOrderChange = { order = it },
-                    )
-                    CategoryChipRow(
-                        categories = categories,
-                        selected = selectedCategory,
-                        onSelect = { selectedCategory = it },
-                    )
-                }
-            },
-            floatingActionButton = {
-                FloatingActionButton(onClick = { adding = true }) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = stringResource(R.string.add_entry),
-                    )
-                }
-            },
-        ) { innerPadding ->
-            Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                ErrorText(state.error, onDismiss = { controller.dismissError() })
+                },
+                bottomBar = {
+                    NavigationBar {
+                        for (item in VaultTab.entries) {
+                            NavigationBarItem(
+                                selected = tab == item,
+                                onClick = { tab = item },
+                                icon = {
+                                    Icon(
+                                        imageVector = item.icon,
+                                        contentDescription = null,
+                                    )
+                                },
+                                label = { Text(stringResource(item.label)) },
+                            )
+                        }
+                    }
+                },
+                floatingActionButton = {
+                    // The keyboard-less way to add: the plus opens the list of record types, the way
+                    // the app this screen is modelled on does it, rather than assuming a password.
+                    if (!typeMenuOpen && (tab == VaultTab.VAULT || tab == VaultTab.SEARCH)) {
+                        FloatingActionButton(onClick = { typeMenuOpen = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = stringResource(R.string.add_entry),
+                            )
+                        }
+                    }
+                },
+            ) { innerPadding ->
+                Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                    ErrorText(state.error, onDismiss = { controller.dismissError() })
 
-                when {
-                    state.entries.isEmpty() -> CenteredMessage(R.string.empty_vault)
-                    // Entries exist, so an empty list means the search or the filter hid them all.
-                    groups.isEmpty() -> CenteredMessage(R.string.nothing_found)
-                    else -> LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
-                    ) {
-                        for (group in groups) {
-                            item(key = "category:${group.category}") {
-                                SectionHeader(
-                                    category = group.category,
-                                    collapsed = group.category in collapsed,
-                                    onToggle = {
-                                        collapsed = if (group.category in collapsed) {
-                                            collapsed - group.category
-                                        } else {
-                                            collapsed + group.category
-                                        }
-                                    },
-                                )
-                            }
-                            if (group.category !in collapsed) {
-                                items(group.entries, key = { it.id }) { entry ->
-                                    EntryRow(entry, onClick = { editing = entry })
+                    when (tab) {
+                        VaultTab.SECURITY -> AuditContent(
+                            entries = state.entries,
+                            onOpenEntry = { entry ->
+                                tab = VaultTab.VAULT
+                                editing = entry
+                            },
+                            modifier = Modifier.padding(16.dp),
+                        )
+
+                        VaultTab.TOOLS -> ToolsContent(
+                            biometricSupported = controller.biometricSupported,
+                            biometricEnrolled = state.biometricEnrolled,
+                            onSaveBackup = { saveBackup.launch(backupFileName) },
+                            onRestoreBackup = { pickBackup.launch(arrayOf("*/*")) },
+                            onExportCsv = { csvExportOpen = true },
+                            onImportCsv = { pickCsv.launch(arrayOf("*/*")) },
+                            onToggleBiometric = {
+                                if (state.biometricEnrolled) {
+                                    controller.forgetBiometricUnlock()
+                                } else {
+                                    val activity = context.findActivity()
+                                    if (activity != null) {
+                                        enableBiometric(activity, controller, biometricTitle, cancelLabel)
+                                    }
+                                }
+                            },
+                            onLock = { controller.lock() },
+                        )
+
+                        VaultTab.VAULT, VaultTab.SEARCH -> {
+                            VaultSearchRow(
+                                query = query,
+                                onQueryChange = { query = it },
+                                order = order,
+                                onOrderChange = { order = it },
+                                favoritesOnly = favoritesOnly,
+                                onFavoritesChange = { favoritesOnly = it },
+                                categories = categories,
+                                category = selectedCategory,
+                                onCategoryChange = { selectedCategory = it },
+                                focus = searchFocus,
+                            )
+                            TypeTabs(
+                                types = types,
+                                selected = typeTab,
+                                onSelect = { typeTab = it },
+                            )
+                            when {
+                                state.entries.isEmpty() -> CenteredMessage(R.string.empty_vault)
+                                // Entries exist, so an empty list means a search or a filter hid them.
+                                shown.isEmpty() -> CenteredMessage(R.string.nothing_found)
+                                else -> LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
+                                ) {
+                                    items(shown, key = { it.id }) { entry ->
+                                        EntryRow(entry, onClick = { editing = entry })
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
+                // The search tab is the same list with the caret already in the field.
+                LaunchedEffect(tab) {
+                    if (tab == VaultTab.SEARCH) {
+                        // The field may not be attached to the window yet on the first frame.
+                        runCatching { searchFocus.requestFocus() }
+                    }
+                }
             }
+        }
+
+        if (typeMenuOpen) {
+            RecordTypeMenu(
+                onPick = { type ->
+                    typeMenuOpen = false
+                    newType = type ?: EntryTypes.PASSWORD
+                    adding = true
+                },
+                onDismiss = { typeMenuOpen = false },
+            )
         }
     }
 
     if (adding) {
         EntryDialog(
-            // A new entry lands in the category that is being filtered, if one is. The picker is
-            // still there to change it — it just starts where the user is looking.
-            initial = Entry(id = "", category = selectedCategory.orEmpty()),
+            // A new entry lands in the type that was picked and in the category that is being
+            // filtered, if one is. Both pickers are still there to change it — they just start
+            // where the user is looking.
+            initial = Entry(
+                id = "",
+                type = newType,
+                category = selectedCategory.orEmpty(),
+            ),
             categories = categories,
             onDismiss = { adding = false },
             onSave = { controller.add(it); adding = false },
@@ -359,17 +439,6 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                 controller.restore({ context.openInput(uri) }, password)
                 restoreUri = null
             },
-        )
-    }
-
-    if (auditOpen) {
-        AuditDialog(
-            entries = state.entries,
-            onOpenEntry = { entry ->
-                auditOpen = false
-                editing = entry
-            },
-            onDismiss = { auditOpen = false },
         )
     }
 
@@ -421,152 +490,334 @@ private fun enableBiometric(
 
 // ---- The list ----
 
+/**
+ * Search, favourites and the category filter, in one line.
+ *
+ * The sort order lives inside the search field rather than in the bar: it changes what the same
+ * list looks like, which is what the field is for, and the screen this is modelled on puts the two
+ * other filters exactly here.
+ */
 @Composable
-private fun VaultSearchField(
+private fun VaultSearchRow(
     query: String,
     onQueryChange: (String) -> Unit,
     order: SortOrder,
     onOrderChange: (SortOrder) -> Unit,
+    favoritesOnly: Boolean,
+    onFavoritesChange: (Boolean) -> Unit,
+    categories: List<String>,
+    category: String?,
+    onCategoryChange: (String?) -> Unit,
+    focus: FocusRequester,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
+    var sortOpen by remember { mutableStateOf(false) }
+    var filterOpen by remember { mutableStateOf(false) }
 
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        singleLine = true,
-        placeholder = { Text(stringResource(R.string.search_hint)) },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-        trailingIcon = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(
-                            imageVector = Icons.Filled.Clear,
-                            contentDescription = stringResource(R.string.cd_clear_search),
-                        )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.search_hint)) },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = stringResource(R.string.cd_clear_search),
+                            )
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { sortOpen = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = stringResource(R.string.cd_sort),
+                            )
+                        }
+                        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sort_by_title)) },
+                                onClick = {
+                                    sortOpen = false
+                                    onOrderChange(SortOrder.TITLE)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sort_by_recent)) },
+                                onClick = {
+                                    sortOpen = false
+                                    onOrderChange(SortOrder.RECENT)
+                                },
+                            )
+                        }
                     }
                 }
-                Box {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(R.string.cd_sort),
-                        )
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sort_by_title)) },
-                            onClick = {
-                                menuOpen = false
-                                onOrderChange(SortOrder.TITLE)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sort_by_recent)) },
-                            onClick = {
-                                menuOpen = false
-                                onOrderChange(SortOrder.RECENT)
-                            },
-                        )
-                    }
+            },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.weight(1f).focusRequester(focus),
+        )
+
+        IconButton(onClick = { onFavoritesChange(!favoritesOnly) }) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = stringResource(R.string.cd_favorites),
+                tint = if (favoritesOnly) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+
+        Box {
+            IconButton(onClick = { filterOpen = true }) {
+                Icon(
+                    // Three lines rather than a funnel: the platform icon set has no funnel, and
+                    // this is the nearest thing in it.
+                    imageVector = Icons.Filled.List,
+                    contentDescription = stringResource(R.string.cd_category_filter),
+                    tint = if (category != null) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.all_categories)) },
+                    onClick = {
+                        onCategoryChange(null)
+                        filterOpen = false
+                    },
+                )
+                for (option in categories) {
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onCategoryChange(option)
+                            filterOpen = false
+                        },
+                    )
                 }
             }
-        },
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-    )
+        }
+    }
 }
 
 /**
- * The categories that actually occur, as filters.
+ * The record types that exist, as tabs above the list.
  *
- * Named rather than drawn as icons, unlike the app this screen takes its shape from: those are its
- * own fixed set of categories, and there is no icon to pick for a word somebody typed themselves.
+ * One tab per type in use rather than one per type the app knows: a tab with nothing under it is a
+ * tab that makes the vault look emptier than it is. "Все" is always there — it is not a type.
  */
 @Composable
-private fun CategoryChipRow(
-    categories: List<String>,
-    selected: String?,
-    onSelect: (String?) -> Unit,
-) {
-    if (categories.isEmpty()) return
+private fun TypeTabs(types: List<String>, selected: String?, onSelect: (String?) -> Unit) {
+    Column {
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            TypeTab(
+                label = stringResource(R.string.tab_all),
+                selected = selected == null,
+                onClick = { onSelect(null) },
+            )
+            for (type in types) {
+                TypeTab(
+                    label = stringResource(EntryTypeUi.label(type)),
+                    selected = selected == type,
+                    onClick = { onSelect(type) },
+                )
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+@Composable
+private fun TypeTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        CategoryChip(
-            label = stringResource(R.string.all_entries),
-            selected = selected == null,
-            onClick = { onSelect(null) },
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            maxLines = 1,
         )
-        for (category in categories) {
-            CategoryChip(
-                label = category,
-                selected = selected == category,
-                onClick = { onSelect(category) },
+        // An underline as wide as the tab, and only under the chosen one: quieter above a busy list
+        // than a filled pill, and this is how the screen it is modelled on marks the choice.
+        Box(
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+                ),
+        )
+    }
+}
+
+// ---- Adding an entry ----
+
+/**
+ * The record types, fanned out above the button that was pressed.
+ *
+ * A stack rather than a menu: choosing the kind of record is the first thing that happens when
+ * adding one, and the app this screen copies makes the choice the shape of the button's answer.
+ */
+@Composable
+private fun RecordTypeMenu(onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.72f))
+            // Tapping away closes it, with no ripple spreading across the whole screen.
+            .clickable(interactionSource = interaction, indication = null) { onDismiss() },
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 96.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val count = EntryTypes.all.size + 1
+            for ((index, type) in EntryTypes.all.withIndex()) {
+                RecordTypePill(
+                    label = stringResource(EntryTypeUi.label(type)),
+                    icon = EntryTypeUi.icon(type),
+                    offset = fanOffset(index, count),
+                    onClick = { onPick(type) },
+                )
+            }
+            // Everything the dialog's own type picker offers, for a kind of record that is none of
+            // the five above.
+            RecordTypePill(
+                label = stringResource(R.string.type_more),
+                icon = Icons.Filled.MoreVert,
+                offset = fanOffset(EntryTypes.all.size, count),
+                onClick = { onPick(null) },
+            )
+        }
+
+        FloatingActionButton(
+            onClick = onDismiss,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.cancel),
             )
         }
     }
 }
 
+/**
+ * How far left a pill in the fan sits.
+ *
+ * The middle of the stack stays furthest right and the ends pull left, which is what turns a column
+ * of buttons into the curve the screen it copies shows. Pure arithmetic on two integers, so it needs
+ * nothing from Compose but the unit.
+ */
+private fun fanOffset(index: Int, count: Int): Dp = -(abs(index - (count - 1) / 2f) * 12f).dp
+
 @Composable
-private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
+private fun RecordTypePill(
+    label: String,
+    icon: ImageVector,
+    offset: Dp,
+    onClick: () -> Unit,
+) {
+    Row(
         modifier = Modifier
+            .offset(x = offset)
             .clip(RoundedCornerShape(50))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-            )
+            .background(MaterialTheme.colorScheme.primary)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
         Text(
             text = label,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onPrimary,
+            style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
         )
     }
 }
 
+// ---- The other two tabs ----
+
+/**
+ * Backup, export and the fingerprint, in one place.
+ *
+ * The same actions the drawer offers, which is where the app this is modelled on keeps them too:
+ * the drawer is the shortcut, this is the page.
+ */
 @Composable
-private fun SectionHeader(category: String, collapsed: Boolean, onToggle: () -> Unit) {
+private fun ToolsContent(
+    biometricSupported: Boolean,
+    biometricEnrolled: Boolean,
+    onSaveBackup: () -> Unit,
+    onRestoreBackup: () -> Unit,
+    onExportCsv: () -> Unit,
+    onImportCsv: () -> Unit,
+    onToggleBiometric: () -> Unit,
+    onLock: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        ToolRow(R.string.backup_save, onSaveBackup)
+        ToolRow(R.string.backup_restore, onRestoreBackup)
+        ToolRow(R.string.csv_export, onExportCsv)
+        ToolRow(R.string.csv_import, onImportCsv)
+        if (biometricSupported) {
+            ToolRow(
+                label = if (biometricEnrolled) R.string.biometric_forget else R.string.biometric_enable,
+                onClick = onToggleBiometric,
+            )
+        }
+        ToolRow(R.string.lock, onLock)
+    }
+}
+
+@Composable
+private fun ToolRow(label: Int, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = category.ifEmpty { stringResource(R.string.uncategorized) },
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            text = stringResource(label),
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
         Icon(
-            imageVector = if (collapsed) {
-                Icons.Filled.KeyboardArrowRight
-            } else {
-                Icons.Filled.KeyboardArrowDown
-            },
-            contentDescription = stringResource(
-                if (collapsed) R.string.cd_expand else R.string.cd_collapse
-            ),
+            imageVector = Icons.Filled.KeyboardArrowRight,
+            contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
+
+// ---- A row ----
 
 @Composable
 private fun EntryRow(entry: Entry, onClick: () -> Unit) {
@@ -615,10 +866,11 @@ private fun EntryRow(entry: Entry, onClick: () -> Unit) {
 }
 
 /**
- * The letter in the circle next to an entry.
+ * The circle next to an entry: the icon of its kind, on the colour its title hashes to.
  *
- * A letter rather than the site's real icon: those are trademarks, and fetching them would mean
- * asking the network about every entry in the vault — which this app does not do, on purpose.
+ * The kind rather than the service's real logo. Those are other people's trademarks, and fetching
+ * one would mean asking the network about every record in the vault — which this app never does.
+ * The colour is worked out from the title, so the same record looks the same on every device.
  */
 @Composable
 private fun EntryAvatar(entry: Entry) {
@@ -629,10 +881,11 @@ private fun EntryAvatar(entry: Entry) {
             .background(Color(EntryList.avatarColorOf(entry))),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = EntryList.initialOf(entry),
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
+        Icon(
+            imageVector = EntryTypeUi.icon(entry.type),
+            contentDescription = stringResource(EntryTypeUi.label(entry.type)),
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
         )
     }
 }

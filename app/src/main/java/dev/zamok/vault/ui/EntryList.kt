@@ -1,13 +1,11 @@
 package dev.zamok.vault.ui
 
 import dev.zamok.vault.model.Entry
+import dev.zamok.vault.model.EntryTypes
 import dev.zamok.vault.model.host
 
 /** How the list is ordered. */
 enum class SortOrder { TITLE, RECENT }
-
-/** One heading in the list: the entries sharing a category, in the order they are shown. */
-data class EntryGroup(val category: String, val entries: List<Entry>)
 
 /** Which of an entry's fields the second line of a row came from. */
 enum class SubtitleKind { USERNAME, ADDRESS, PASSWORD, NONE }
@@ -17,8 +15,8 @@ data class Subtitle(val kind: SubtitleKind, val value: String)
 /**
  * Everything the list screen derives from the entries.
  *
- * Pure on purpose: the screen holds the query, the chosen category and the sort order, and this
- * turns them into what is drawn. That is what makes the whole of it testable without a device —
+ * Pure on purpose: the screen holds the query, the tab, the chosen category and the sort order, and
+ * this turns them into what is drawn. That is what makes the whole of it testable without a device —
  * and a list is exactly where the mistakes are easy to make and hard to notice.
  */
 object EntryList {
@@ -44,11 +42,20 @@ object EntryList {
         entries.map { it.category.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
 
     /**
+     * The tabs above the list: the record types that actually occur, in the app's own order.
+     *
+     * Only the ones in use — a tab with nothing under it is a tab that teaches the user their vault
+     * is emptier than it is. "All" is not in here; the screen adds it, and it is always there.
+     */
+    fun typesPresent(entries: List<Entry>): List<String> =
+        EntryTypes.all.filter { type -> entries.any { EntryTypes.normalise(it.type) == type } }
+
+    /**
      * The entries to draw, in the order to draw them.
      *
-     * [category] is null for "all of them". A blank [query] matches everything; anything else is
-     * searched across the title, login, address, notes and tags, which is what someone types when
-     * they cannot quite remember how they named an entry.
+     * [type] and [category] are null for "all of them". A blank [query] matches everything; anything
+     * else is searched across the title, login, address, notes and tags, which is what someone types
+     * when they cannot quite remember how they named an entry.
      */
     fun apply(
         entries: List<Entry>,
@@ -56,11 +63,13 @@ object EntryList {
         category: String? = null,
         favoritesOnly: Boolean = false,
         order: SortOrder = SortOrder.TITLE,
+        type: String? = null,
     ): List<Entry> {
         val needle = query.trim().lowercase()
         val matched = entries.filter { entry ->
             (!favoritesOnly || entry.favorite) &&
                 (category == null || entry.category.trim() == category) &&
+                (type == null || EntryTypes.normalise(entry.type) == type) &&
                 (needle.isEmpty() || entry.matches(needle))
         }
         return when (order) {
@@ -74,20 +83,6 @@ object EntryList {
         }
     }
 
-    /**
-     * [entries] split under category headings.
-     *
-     * Groups keep the order [entries] already has. The uncategorised group — the empty category —
-     * is always last: it is a leftover, not a place someone chose to put anything.
-     */
-    fun group(entries: List<Entry>): List<EntryGroup> {
-        val byCategory = entries.groupBy { it.category.trim() }
-        val named = byCategory.keys.filter { it.isNotEmpty() }.sorted()
-        val groups = named.map { EntryGroup(it, byCategory.getValue(it)) }
-        val uncategorized = byCategory[""].orEmpty()
-        return if (uncategorized.isEmpty()) groups else groups + EntryGroup("", uncategorized)
-    }
-
     /** The second line of a row: the login, else the address, else a masked password. */
     fun subtitleOf(entry: Entry): Subtitle = when {
         entry.username.isNotBlank() -> Subtitle(SubtitleKind.USERNAME, entry.username)
@@ -96,17 +91,7 @@ object EntryList {
         else -> Subtitle(SubtitleKind.NONE, "")
     }
 
-    /** The letter in the avatar, or a placeholder for an entry that has no name yet. */
-    fun initialOf(entry: Entry): String =
-        entry.title.trim().take(1).uppercase().ifEmpty { "?" }
-
-    /**
-     * A colour for the avatar, depending only on the title.
-     *
-     * The sum of the code points rather than `hashCode()`, because this value decides what the user
-     * sees: it has to be the same on every device and every run, and adding up characters is a
-     * promise that is easy to keep.
-     */
+    /** A colour for the avatar, depending only on the title. */
     fun avatarColorOf(entry: Entry): Long = colorFor(entry.title)
 
     /** The same colour by name, so a category dot matches the circle its entries get in the list. */

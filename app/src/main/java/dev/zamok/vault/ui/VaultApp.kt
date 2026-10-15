@@ -62,6 +62,7 @@ import dev.zamok.vault.crypto.Totp
 import dev.zamok.vault.data.PasswordAudit
 import dev.zamok.vault.data.WeakReason
 import dev.zamok.vault.model.Entry
+import dev.zamok.vault.model.EntryTypes
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -88,6 +89,10 @@ fun VaultApp(controller: VaultController) {
 private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
     var password by remember { mutableStateOf("") }
     var visible by remember { mutableStateOf(false) }
+    // Whether the master password is being asked for at all. Starts off when a fingerprint is
+    // enrolled, so a vault that was put down and picked up again opens with a finger and nothing
+    // else on screen.
+    var passwordWanted by remember { mutableStateOf(false) }
     val creating = !state.vaultExists
 
     val activity = LocalContext.current.findActivity()
@@ -120,34 +125,56 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
             Text(stringResource(R.string.create_hint), style = MaterialTheme.typography.bodyMedium)
         }
 
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text(stringResource(R.string.master_password)) },
-            singleLine = true,
-            enabled = !state.busy,
-            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // A vault with a fingerprint enrolled opens with a finger, and the password sits behind a
+        // link instead of disappearing. Behind a link rather than gone on purpose: a sensor that
+        // stops working, or a fingerprint the system has invalidated, would otherwise lock the
+        // owner out of their own vault for good — a worse failure than one extra tap.
+        val askForPassword = creating || !biometricsReady || passwordWanted
 
-        TextButton(onClick = { visible = !visible }, enabled = !state.busy) {
-            Text(stringResource(if (visible) R.string.hide_password else R.string.show_password))
+        if (askForPassword) {
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text(stringResource(R.string.master_password)) },
+                singleLine = true,
+                enabled = !state.busy,
+                visualTransformation = if (visible) {
+                    VisualTransformation.None
+                } else {
+                    PasswordVisualTransformation()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            TextButton(onClick = { visible = !visible }, enabled = !state.busy) {
+                Text(stringResource(if (visible) R.string.hide_password else R.string.show_password))
+            }
         }
 
         ErrorText(state.error)
 
-        Button(
-            onClick = { if (creating) controller.create(password) else controller.unlock(password) },
-            enabled = !state.busy && password.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(if (creating) R.string.create_vault else R.string.open_vault))
+        if (askForPassword) {
+            Button(
+                onClick = {
+                    if (creating) controller.create(password) else controller.unlock(password)
+                },
+                enabled = !state.busy && password.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(if (creating) R.string.create_vault else R.string.open_vault))
+            }
         }
 
         if (biometricsReady) {
             BiometricUnlockButton(controller, enabled = !state.busy)
-            TextButton(onClick = { controller.forgetBiometricUnlock() }, enabled = !state.busy) {
-                Text(stringResource(R.string.biometric_forget))
+            if (askForPassword) {
+                TextButton(onClick = { controller.forgetBiometricUnlock() }, enabled = !state.busy) {
+                    Text(stringResource(R.string.biometric_forget))
+                }
+            } else {
+                TextButton(onClick = { passwordWanted = true }, enabled = !state.busy) {
+                    Text(stringResource(R.string.unlock_with_password))
+                }
             }
         }
 
@@ -286,6 +313,7 @@ internal fun EntryDialog(
     var url by remember { mutableStateOf(initial.url) }
     var notes by remember { mutableStateOf(initial.notes) }
     var category by remember { mutableStateOf(initial.category) }
+    var type by remember { mutableStateOf(initial.type) }
     var tags by remember { mutableStateOf(initial.tags.joinToString(", ")) }
     var totpSecret by remember { mutableStateOf(initial.totpSecret) }
     var favorite by remember { mutableStateOf(initial.favorite) }
@@ -305,8 +333,10 @@ internal fun EntryDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // The category first, the way the screen this is modelled on does it: it is the
-                // choice that decides where the entry lands, and the list is grouped by it.
+                TypeField(type = type, onTypeChange = { type = it })
+                // The category next, the way the screens this is modelled on put them: two choices
+                // on top, because together they decide where the record lands and what it looks
+                // like in the list.
                 CategoryField(
                     category = category,
                     options = categoryChoices,
@@ -364,6 +394,7 @@ internal fun EntryDialog(
                 onClick = {
                     onSave(
                         initial.copy(
+                            type = type,
                             title = title,
                             username = username,
                             password = password,
@@ -415,6 +446,67 @@ private fun Field(
         visualTransformation = visualTransformation,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * Picking what kind of record this is.
+ *
+ * The type decides the record's icon in the list and which tab it lives under, which is why it is
+ * asked for before anything else — and why the "add" menu can hand the dialog a type that is
+ * already chosen.
+ */
+@Composable
+private fun TypeField(type: String, onTypeChange: (String) -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = stringResource(R.string.field_type),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { menuOpen = true }
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = EntryTypeUi.icon(type),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(EntryTypeUi.label(type)),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = 10.dp),
+                )
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                for (option in EntryTypes.all) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(EntryTypeUi.label(option))) },
+                        leadingIcon = { Icon(EntryTypeUi.icon(option), contentDescription = null) },
+                        onClick = {
+                            onTypeChange(option)
+                            menuOpen = false
+                        },
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -640,77 +732,73 @@ internal fun RestoreDialog(onDismiss: () -> Unit, onRestore: (String) -> Unit) {
 }
 
 /**
- * What the rules make of the passwords already in the vault.
+ * What the rules make of the passwords already in the vault, with no dialog around it.
  *
+ * The security tab shows this in the page, which is why it is written once, without a frame.
  * Only entries with something wrong are listed, and tapping one opens it for editing: a warning
  * that does not lead to the thing to change is just noise. The hint at the bottom says what this is
  * and, more importantly, what it is not.
  */
 @Composable
-internal fun AuditDialog(entries: List<Entry>, onOpenEntry: (Entry) -> Unit, onDismiss: () -> Unit) {
-    // A pure function of the entries, so it runs when the dialog opens rather than being watched.
+internal fun AuditContent(
+    entries: List<Entry>,
+    onOpenEntry: (Entry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // A pure function of the entries, so it runs when the screen appears rather than being watched.
     val report = remember(entries) { PasswordAudit.report(entries) }
     val untitled = stringResource(R.string.untitled)
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.audit_title)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (report.isEmpty) {
-                    Text(stringResource(R.string.audit_clean))
-                }
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (report.isEmpty) {
+            Text(stringResource(R.string.audit_clean))
+        }
 
-                if (report.reused.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.audit_reused),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    for (group in report.reused) {
-                        Text(
-                            // One group can be several entries; opening the first of them is enough
-                            // of a lead to work out what to split apart.
-                            text = group.entries.joinToString(", ") { it.title.ifBlank { untitled } },
-                            modifier = Modifier.clickable { onOpenEntry(group.entries.first()) },
-                        )
-                    }
-                }
-
-                if (report.weak.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.audit_weak),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    for (finding in report.weak) {
-                        Column(modifier = Modifier.clickable { onOpenEntry(finding.entry) }) {
-                            Text(
-                                text = finding.entry.title.ifBlank { untitled },
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                // `map` is inline, so resolving the labels here is allowed.
-                                text = finding.reasons.map { stringResource(reasonLabel(it)) }
-                                    .joinToString(", "),
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
-
+        if (report.reused.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.audit_reused),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            for (group in report.reused) {
                 Text(
-                    text = stringResource(R.string.audit_hint),
-                    style = MaterialTheme.typography.bodySmall,
+                    // One group can be several entries; opening the first of them is enough of a
+                    // lead to work out what to split apart.
+                    text = group.entries.joinToString(", ") { it.title.ifBlank { untitled } },
+                    modifier = Modifier.clickable { onOpenEntry(group.entries.first()) },
                 )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
-        },
-    )
+        }
+
+        if (report.weak.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.audit_weak),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            for (finding in report.weak) {
+                Column(modifier = Modifier.clickable { onOpenEntry(finding.entry) }) {
+                    Text(
+                        text = finding.entry.title.ifBlank { untitled },
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        // `map` is inline, so resolving the labels here is allowed.
+                        text = finding.reasons.map { stringResource(reasonLabel(it)) }
+                            .joinToString(", "),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = stringResource(R.string.audit_hint),
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }
 
 private fun reasonLabel(reason: WeakReason): Int = when (reason) {
