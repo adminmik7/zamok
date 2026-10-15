@@ -1,7 +1,6 @@
 package dev.zamok.vault
 
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import dev.zamok.vault.ui.BiometricPromptRunner
@@ -15,9 +14,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Without this, every password in the vault is one screenshot away, and the thumbnail in
-        // the recents switcher shows the list to anyone holding the phone.
-        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        // No FLAG_SECURE on the window: screenshots and the recents thumbnail are allowed. It is a
+        // per app, all or nothing switch — there is no version of it that permits a screenshot but
+        // hides the recents preview — so asking for one half means giving up the other.
         setContent {
             ZamokTheme {
                 VaultApp(controller)
