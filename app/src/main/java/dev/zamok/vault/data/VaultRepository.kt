@@ -28,6 +28,11 @@ class VaultRepository(
     ),
     private val iterations: Int = VaultFile.DEFAULT_ITERATIONS,
     private val now: () -> Long = System::currentTimeMillis,
+    /**
+     * Called whenever the biometric copy is dropped, so the Keystore key behind it can go too.
+     * A no-op by default: there is no Keystore off the device, and the tests run on a JVM.
+     */
+    private val dropBiometricKey: () -> Unit = {},
 ) {
 
     private var file: VaultFile? = null
@@ -163,9 +168,15 @@ class VaultRepository(
         }
     }
 
-    /** Removes the biometric copy. The vault itself is untouched and still needs its password. */
+    /**
+     * Removes the biometric copy and the Keystore key it was sealed with.
+     *
+     * The vault itself is untouched and still needs its password. Nothing is lost by dropping the
+     * key: the vault key is the only thing it was wrapping, and the master password still opens it.
+     */
     fun forgetBiometricUnlock() {
         biometricStore.delete()
+        dropBiometricKey()
     }
 
     /** The IV the stored copy was encrypted with, needed to build the decrypt cipher. Not secret. */

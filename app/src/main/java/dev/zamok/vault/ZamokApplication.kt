@@ -1,6 +1,8 @@
 package dev.zamok.vault
 
 import android.app.Application
+import android.os.Build
+import dev.zamok.vault.crypto.KeystoreVaultKey
 import dev.zamok.vault.data.VaultRepository
 import dev.zamok.vault.data.VaultStore
 import dev.zamok.vault.ui.BiometricSupport
@@ -21,7 +23,12 @@ import java.io.File
 class ZamokApplication : Application() {
 
     val repository: VaultRepository by lazy {
-        VaultRepository(VaultStore(File(filesDir, VAULT_FILE_NAME)))
+        VaultRepository(
+            store = VaultStore(File(filesDir, VAULT_FILE_NAME)),
+            dropBiometricKey = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) KeystoreVaultKey.deleteKey()
+            },
+        )
     }
 
     /** Created lazily on the main thread, so the controller's default dispatch is usable. */

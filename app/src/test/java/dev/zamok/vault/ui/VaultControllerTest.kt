@@ -167,6 +167,28 @@ class VaultControllerTest {
     }
 
     @Test
+    fun `forgetting the biometric copy drops the Keystore key too`() {
+        var dropped = 0
+        val repository = VaultRepository(
+            store = VaultStore(File(temporaryFolder.root, "vault.zmk")),
+            iterations = 1_000,
+            now = { 1_000L },
+            dropBiometricKey = { dropped++ },
+        )
+        val controller = VaultController(repository, immediate, immediate)
+
+        controller.create(password)
+        controller.enableBiometricUnlock { it.copyOf() }
+        controller.lock()
+        dropped = 0
+
+        controller.forgetBiometricUnlock()
+
+        assertEquals(1, dropped)
+        assertFalse(controller.state.biometricEnrolled)
+    }
+
+    @Test
     fun `reopening sees what was stored`() {
         val first = controller()
         first.create(password)
