@@ -90,6 +90,8 @@
 
     <!-- Unlocking with a fingerprint -->
     <string name="unlock_with_password">Ввести мастер-пароль</string>
+    <string name="biometric_not_set_up">Вход по отпечатку не включён. Откройте хранилище паролем и включите его: «Инструменты» → «Отпечаток».</string>
+    <string name="biometric_cannot_enable">Не удалось обратиться к хранилищу ключей Android, поэтому вход по отпечатку недоступен.</string>
     <string name="field_tags">Метки (через запятую)</string>
     <string name="field_favorite">В избранном</string>
     <string name="save">Сохранить</string>

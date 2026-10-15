@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -176,6 +177,15 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
                     Text(stringResource(R.string.unlock_with_password))
                 }
             }
+        } else if (!creating && controller.biometricSupported) {
+            // The reason the password is being asked for, said plainly. A fingerprint can only be
+            // enrolled while the vault is open, so this points at where to do that rather than
+            // leaving the user to wonder why the prompt they expected never came.
+            Text(
+                text = stringResource(R.string.biometric_not_set_up),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         if (state.busy) {
@@ -230,6 +240,9 @@ internal fun promptBiometricUnlock(
     val cipher = iv?.let { runCatching { KeystoreVaultKey.decryptionCipher(it) }.getOrNull() }
 
     when {
+        // A copy is on disk but cannot be read at all, so it can never open the vault again.
+        iv == null && controller.state.biometricEnrolled -> controller.onBiometricKeyLost()
+
         // The Keystore key is gone — the platform destroys it when a fingerprint is added — so the
         // stored copy can never open anything again.
         iv != null && cipher == null -> controller.onBiometricKeyLost()
@@ -244,8 +257,14 @@ internal fun promptBiometricUnlock(
                     unlocked.doFinal(BiometricBlob.decode(blob).ciphertext)
                 }
             },
-            // A cancelled or failed prompt already told the user in the system dialog.
-            onFailure = {},
+            // Backing out of the dialog says nothing, because the user already knows. Anything else
+            // has to be said out loud: the only other symptom is a password field with no
+            // explanation, which is indistinguishable from the feature not existing.
+            onFailure = { message ->
+                if (message != null) {
+                    Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+                }
+            },
         )
     }
 }

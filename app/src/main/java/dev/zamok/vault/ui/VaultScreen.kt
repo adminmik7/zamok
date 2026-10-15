@@ -472,7 +472,18 @@ private fun enableBiometric(
 ) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
 
-    val cipher = runCatching { KeystoreVaultKey.encryptionCipher() }.getOrNull() ?: return
+    val cipher = runCatching { KeystoreVaultKey.encryptionCipher() }.getOrNull()
+    if (cipher == null) {
+        // Said out loud rather than by doing nothing: a toggle that silently does nothing is
+        // indistinguishable from a feature that does not work.
+        Toast.makeText(
+            activity,
+            activity.getString(R.string.biometric_cannot_enable),
+            Toast.LENGTH_LONG,
+        ).show()
+        return
+    }
+
     BiometricPromptRunner.run(
         activity = activity,
         cipher = cipher,
@@ -484,7 +495,11 @@ private fun enableBiometric(
                 BiometricBlob.encode(iv, unlocked.doFinal(vaultKey))
             }
         },
-        onFailure = {},
+        onFailure = { message ->
+            if (message != null) {
+                Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+            }
+        },
     )
 }
 

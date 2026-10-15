@@ -2,6 +2,7 @@ package dev.zamok.vault.crypto
 
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import androidx.annotation.RequiresApi
 import java.security.KeyStore
@@ -45,11 +46,32 @@ internal object KeystoreVaultKey {
     fun encryptionCipher(): Cipher =
         Cipher.getInstance(TRANSFORM).apply { init(Cipher.ENCRYPT_MODE, key()) }
 
-    /** A cipher for the prompt in decrypt mode, bound to the IV stored alongside the blob. */
+    /**
+     * A cipher for the prompt in decrypt mode, bound to the IV stored alongside the blob.
+     *
+     * Uses the key that is already in the Keystore, never one it could create. That is deliberate:
+     * on Android, enrolling a new fingerprint destroys the key, and the platform does not say so
+     * until the key is used. Creating a fresh one here would hide exactly the case this feature
+     * most needs to report — the cipher would initialise, the user would scan a finger, and the
+     * failure would surface afterwards as "wrong password", which is not what happened.
+     */
     fun decryptionCipher(iv: ByteArray): Cipher =
         Cipher.getInstance(TRANSFORM).apply {
-            init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, iv))
+            init(Cipher.DECRYPT_MODE, existingKey(), GCMParameterSpec(TAG_BITS, iv))
         }
+
+    /**
+     * The Keystore key, which must already be there.
+     *
+     * [KeyPermanentlyInvalidatedException] is what the platform itself throws for a key destroyed
+     * by a new fingerprint, so it is reused here rather than inventing a parallel type: the user
+     * has to re-enrol either way, and the app already maps it to the right message.
+     */
+    private fun existingKey(): SecretKey =
+        keyStore().getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry
+            ?: throw KeyPermanentlyInvalidatedException(
+                "The biometric Keystore key is gone, so the stored copy cannot be opened"
+            )
 
     /**
      * Removes the Keystore key, so the stored blob becomes permanently useless.

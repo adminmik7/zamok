@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import dev.zamok.vault.ui.BiometricPromptRunner
 import dev.zamok.vault.ui.VaultApp
 import dev.zamok.vault.ui.ZamokTheme
 
@@ -29,11 +30,12 @@ class MainActivity : ComponentActivity() {
      * which a picked-up phone still has every password in it.
      *
      * Rotating the device is not leaving: locking there would make the app feel broken, so it is
-     * excluded explicitly.
+     * excluded explicitly. Neither is answering the fingerprint dialog — the user is right there,
+     * and locking under it is what makes disabling the fingerprint look like it worked.
      */
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) {
+        if (!isChangingConfigurations && !BiometricPromptRunner.promptActive) {
             controller.lock()
         }
     }
