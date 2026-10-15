@@ -3,9 +3,14 @@ package dev.zamok.vault.data
 import dev.zamok.vault.crypto.VaultCryptoException
 import dev.zamok.vault.crypto.VaultFile
 import dev.zamok.vault.crypto.VaultSession
+import dev.zamok.vault.crypto.wipe
 import dev.zamok.vault.model.Entry
 import dev.zamok.vault.model.Vault
+import java.io.File
+import java.security.GeneralSecurityException
 import java.util.UUID
+
+private const val BIOMETRIC_FILE_SUFFIX = ".bio"
 
 /**
  * The vault and everything that can be done to it.
@@ -18,6 +23,9 @@ import java.util.UUID
  */
 class VaultRepository(
     private val store: VaultStore,
+    private val biometricStore: VaultStore = VaultStore(
+        File(store.file.parentFile, store.file.name + BIOMETRIC_FILE_SUFFIX)
+    ),
     private val iterations: Int = VaultFile.DEFAULT_ITERATIONS,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -41,6 +49,8 @@ class VaultRepository(
      */
     fun create(masterPassword: CharArray) {
         check(!vaultExists()) { "A vault already exists" }
+        // A new vault gets a new vault key, so any biometric copy belongs to the old one.
+        forgetBiometricUnlock()
         store.write(VaultFile.create(masterPassword, VaultCodec.encode(Vault()), iterations).encode())
         // Reopen what was just written instead of trusting the in-memory copy. It costs one extra
         // KDF run, once per vault, and proves the file on disk is really there and really opens.
@@ -57,16 +67,7 @@ class VaultRepository(
         lock()
         val openedFile = VaultFile.parse(store.read())
         val openedSession = openedFile.unlock(masterPassword)
-        val loaded = try {
-            VaultCodec.decode(openedSession.readPayload()).entries
-        } catch (failure: Throwable) {
-            // The session owns the vault key; do not leave it in memory because decoding failed.
-            openedSession.close()
-            throw failure
-        }
-        file = openedFile
-        session = openedSession
-        entries = loaded
+        adopt(openedFile, openedSession)
     }
 
     /** Drops the vault key and the entries. Safe to call when already locked. */
@@ -110,7 +111,7 @@ class VaultRepository(
         return stored
     }
 
-    /** @throws IllegalArgumentException if no entry has that id. */
+    /** @throws IllegalArgumentException if no entry with that id exists. */
     fun delete(id: String) {
         val activeSession = requireSession()
         val remaining = entries.filterNot { it.id == id }
@@ -132,8 +133,69 @@ class VaultRepository(
         val currentFile = file ?: throw IllegalStateException("Vault is locked")
         val rotated = currentFile.changePassword(current, new, iterations)
         store.write(rotated.encode())
-        // The vault key did not change, so the open session is still good.
+        // The vault key did not change, so the open session and any biometric copy stay good.
         file = rotated
+    }
+
+    // ---- Biometric unlock ----
+    //
+    // The vault key is also kept encrypted under a Keystore key that needs a fresh biometric
+    // unlock. Everything Keystore-shaped stays out of this class: the caller performs the prompt
+    // and passes two functions, so what is left here — which key gets stored, when it is dropped,
+    // and what happens when it no longer fits — is the part worth testing.
+
+    /** True when a biometric copy of the vault key is on disk. */
+    fun biometricUnlockEnrolled(): Boolean = biometricStore.exists()
+
+    /**
+     * Stores a biometric-protected copy of the open vault's key.
+     *
+     * [seal] receives the raw vault key and returns the bytes to persist. It only runs while the
+     * vault is unlocked, and what it produces is usable only after a biometric unlock.
+     */
+    fun enableBiometricUnlock(seal: (ByteArray) -> ByteArray) {
+        val activeSession = requireSession()
+        val vaultKey = activeSession.vaultKeyCopy()
+        try {
+            biometricStore.write(seal(vaultKey))
+        } finally {
+            vaultKey.wipe()
+        }
+    }
+
+    /** Removes the biometric copy. The vault itself is untouched and still needs its password. */
+    fun forgetBiometricUnlock() {
+        biometricStore.delete()
+    }
+
+    /** The IV the stored copy was encrypted with, needed to build the decrypt cipher. Not secret. */
+    fun biometricIv(): ByteArray =
+        dev.zamok.vault.crypto.BiometricBlob.decode(biometricStore.read()).iv
+
+    /**
+     * Opens the vault with the vault key recovered by [open] from the stored biometric copy.
+     *
+     * @throws VaultCryptoException if the recovered key does not match this vault.
+     * @throws java.security.GeneralSecurityException if the Keystore refused to release the key.
+     */
+    fun unlockWithBiometrics(open: (ByteArray) -> ByteArray) {
+        lock()
+        val vaultKey = try {
+            open(biometricStore.read())
+        } catch (failure: GeneralSecurityException) {
+            // The Keystore key was invalidated (a fingerprint was added) or the copy belongs to
+            // another vault. It can never work again, and keeping it would keep offering an unlock
+            // that is guaranteed to fail.
+            forgetBiometricUnlock()
+            throw failure
+        }
+        try {
+            val openedFile = VaultFile.parse(store.read())
+            val openedSession = openedFile.unlockWithVaultKey(vaultKey)
+            adopt(openedFile, openedSession)
+        } finally {
+            vaultKey.wipe()
+        }
     }
 
     private fun requireSession(): VaultSession =
@@ -148,5 +210,18 @@ class VaultRepository(
         store.write(written.encode())
         file = written
         entries = updated
+    }
+
+    /** Takes a freshly opened session into use, dropping it again if its payload cannot be read. */
+    private fun adopt(openedFile: VaultFile, openedSession: VaultSession) {
+        entries = try {
+            VaultCodec.decode(openedSession.readPayload()).entries
+        } catch (failure: Throwable) {
+            // The session owns the vault key; do not leave it in memory because decoding failed.
+            openedSession.close()
+            throw failure
+        }
+        file = openedFile
+        session = openedSession
     }
 }

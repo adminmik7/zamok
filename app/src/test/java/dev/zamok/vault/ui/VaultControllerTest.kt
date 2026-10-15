@@ -157,4 +157,94 @@ class VaultControllerTest {
 
         assertEquals("секрет", second.state.entries.single().password)
     }
+
+    // ---- Biometric unlock ----
+    //
+    // The Keystore half is a device concern and is checked on a phone. What is checked here is the
+    // bookkeeping around it: when a copy is kept, when it is thrown away, and what the screens are
+    // told afterwards. The lambdas stand in for the Keystore cipher, which is why they are handed
+    // the vault key and just hand it back.
+
+    @Test
+    fun `enrolling a biometric copy is reported to the screens`() {
+        val controller = controller()
+        controller.create(password)
+
+        controller.enableBiometricUnlock { it.copyOf() }
+
+        assertTrue(controller.state.biometricEnrolled)
+    }
+
+    @Test
+    fun `a biometric unlock opens the vault`() {
+        val first = controller()
+        first.create(password)
+        first.add(Entry(id = "", title = "Почта", password = "секрет"))
+        first.enableBiometricUnlock { it.copyOf() }
+        first.lock()
+
+        val second = controller()
+        assertTrue(second.state.biometricEnrolled)
+        second.unlockWithBiometrics { it.copyOf() }
+
+        assertTrue(second.state.unlocked)
+        assertEquals("секрет", second.state.entries.single().password)
+    }
+
+    @Test
+    fun `a copy that does not match the vault is refused and thrown away`() {
+        val first = controller()
+        first.create(password)
+        first.enableBiometricUnlock { it.copyOf() }
+        first.lock()
+
+        val second = controller()
+        // The Keystore hands back a key that is not this vault's.
+        second.unlockWithBiometrics { ByteArray(32) { 9 } }
+
+        assertEquals(VaultError.WRONG_PASSWORD_OR_DAMAGED, second.state.error)
+        assertFalse(second.state.unlocked)
+        // Dropped, so the screen stops offering an unlock that can only fail.
+        assertFalse(second.state.biometricEnrolled)
+    }
+
+    @Test
+    fun `a lost keystore key drops the copy and explains itself`() {
+        val controller = controller()
+        controller.create(password)
+        controller.enableBiometricUnlock { it.copyOf() }
+
+        controller.onBiometricKeyLost()
+
+        assertEquals(VaultError.BIOMETRIC_LOST, controller.state.error)
+        assertFalse(controller.state.biometricEnrolled)
+    }
+
+    @Test
+    fun `forgetting biometrics leaves the vault reachable by password`() {
+        val controller = controller()
+        controller.create(password)
+        controller.enableBiometricUnlock { it.copyOf() }
+
+        controller.forgetBiometricUnlock()
+        controller.lock()
+
+        val second = controller()
+        assertFalse(second.state.biometricEnrolled)
+        second.unlock(password)
+        assertTrue(second.state.unlocked)
+    }
+
+    @Test
+    fun `creating a vault drops a leftover biometric copy`() {
+        // A copy of the old vault's key must not survive into a vault that has a new key.
+        val leftover = File(temporaryFolder.root, "vault.zmk.bio")
+        leftover.writeBytes(ByteArray(64))
+        val controller = controller()
+
+        controller.create(password)
+
+        assertFalse(controller.state.biometricEnrolled)
+        assertFalse(leftover.exists())
+    }
 }

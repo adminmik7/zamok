@@ -3,6 +3,7 @@ package dev.zamok.vault
 import android.app.Application
 import dev.zamok.vault.data.VaultRepository
 import dev.zamok.vault.data.VaultStore
+import dev.zamok.vault.ui.BiometricSupport
 import dev.zamok.vault.ui.VaultController
 import java.io.File
 
@@ -24,7 +25,12 @@ class ZamokApplication : Application() {
     }
 
     /** Created lazily on the main thread, so the controller's default dispatch is usable. */
-    val controller: VaultController by lazy { VaultController(repository) }
+    val controller: VaultController by lazy {
+        VaultController(
+            repository = repository,
+            biometricSupported = BiometricSupport.isSupported(this),
+        )
+    }
 
     private companion object {
         const val VAULT_FILE_NAME = "vault.zmk"

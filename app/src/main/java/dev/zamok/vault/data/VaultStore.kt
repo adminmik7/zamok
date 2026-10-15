@@ -15,7 +15,7 @@ import java.nio.file.StandardCopyOption
  *
  * `java.nio.file` is available from API 26, which is this app's `minSdk`.
  */
-class VaultStore(private val file: File) {
+class VaultStore(val file: File) {
 
     /** True when a vault is present and not empty. */
     fun exists(): Boolean = file.isFile && file.length() > 0L
@@ -51,5 +51,10 @@ class VaultStore(private val file: File) {
             // A no-op once the move succeeded; cleanup when anything above threw.
             temporary.delete()
         }
+    }
+
+    /** Removes the file. A no-op when there is nothing to remove. */
+    fun delete() {
+        file.delete()
     }
 }

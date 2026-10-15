@@ -1,5 +1,9 @@
 package dev.zamok.vault.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,11 +33,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.zamok.vault.R
+import dev.zamok.vault.crypto.BiometricBlob
+import dev.zamok.vault.crypto.KeystoreVaultKey
 import dev.zamok.vault.model.Entry
 
 /**
@@ -95,6 +102,13 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
             Text(stringResource(if (creating) R.string.create_vault else R.string.open_vault))
         }
 
+        if (!creating && state.biometricEnrolled && controller.biometricSupported) {
+            BiometricUnlockButton(controller, enabled = !state.busy)
+            TextButton(onClick = { controller.forgetBiometricUnlock() }, enabled = !state.busy) {
+                Text(stringResource(R.string.biometric_forget))
+            }
+        }
+
         if (state.busy) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         }
@@ -112,6 +126,9 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
+                    if (controller.biometricSupported && !state.biometricEnrolled) {
+                        EnableBiometricAction(controller, enabled = !state.busy)
+                    }
                     TextButton(onClick = { controller.lock() }) {
                         Text(stringResource(R.string.lock))
                     }
@@ -162,6 +179,96 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
     }
 }
 
+// ---- Biometric unlock ----
+//
+// The prompt lives here because it needs an Activity, which only the UI layer has. Everything it
+// touches on the vault is reached through the controller, so no screen ever sees a key.
+
+@Composable
+private fun BiometricUnlockButton(controller: VaultController, enabled: Boolean) {
+    val activity = LocalContext.current.findActivity()
+    val promptTitle = stringResource(R.string.biometric_prompt_title)
+    val cancelLabel = stringResource(R.string.cancel)
+
+    Button(
+        onClick = {
+            if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return@Button
+
+            // The stored blob carries the IV, because the Keystore generated it and only the
+            // Keystore knows it. It is not secret, so reading it here is harmless.
+            val iv = controller.biometricIv()
+            val cipher = iv?.let { runCatching { KeystoreVaultKey.decryptionCipher(it) }.getOrNull() }
+
+            when {
+                iv != null && cipher == null ->
+                    // The Keystore key is gone — the platform destroys it when a fingerprint is
+                    // added — so the stored copy can never open anything again.
+                    controller.onBiometricKeyLost()
+
+                cipher != null -> BiometricPromptRunner.run(
+                    activity = activity,
+                    cipher = cipher,
+                    title = promptTitle,
+                    cancelLabel = cancelLabel,
+                    onUnlocked = { unlocked ->
+                        controller.unlockWithBiometrics { blob ->
+                            unlocked.doFinal(BiometricBlob.decode(blob).ciphertext)
+                        }
+                    },
+                    // A cancelled or failed prompt already told the user in the system dialog.
+                    onFailure = {},
+                )
+            }
+        },
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(stringResource(R.string.biometric_unlock))
+    }
+}
+
+@Composable
+private fun EnableBiometricAction(controller: VaultController, enabled: Boolean) {
+    val activity = LocalContext.current.findActivity()
+    val promptTitle = stringResource(R.string.biometric_prompt_title)
+    val cancelLabel = stringResource(R.string.cancel)
+
+    TextButton(
+        onClick = {
+            if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return@TextButton
+
+            val cipher = runCatching { KeystoreVaultKey.encryptionCipher() }.getOrNull()
+            if (cipher != null) {
+                BiometricPromptRunner.run(
+                    activity = activity,
+                    cipher = cipher,
+                    title = promptTitle,
+                    cancelLabel = cancelLabel,
+                    onUnlocked = { unlocked ->
+                        // The IV is read after the prompt rather than before: the Keystore sets it
+                        // when the cipher is initialised, and it must be stored with the blob.
+                        val iv = unlocked.iv
+                        controller.enableBiometricUnlock { vaultKey ->
+                            BiometricBlob.encode(iv, unlocked.doFinal(vaultKey))
+                        }
+                    },
+                    onFailure = {},
+                )
+            }
+        },
+        enabled = enabled,
+    ) {
+        Text(stringResource(R.string.biometric_enable))
+    }
+}
+
+/** `LocalContext` is not always the activity itself, so unwrap until one turns up. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
 private fun EntryRow(entry: Entry, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clickable(onClick = onClick)) {
@@ -190,6 +297,7 @@ private fun ErrorText(error: VaultError?, onDismiss: (() -> Unit)? = null) {
                     VaultError.WRONG_PASSWORD_OR_DAMAGED -> R.string.error_wrong_password
                     VaultError.PASSWORD_TOO_SHORT -> R.string.error_password_too_short
                     VaultError.STORAGE -> R.string.error_storage
+                    VaultError.BIOMETRIC_LOST -> R.string.error_biometric_lost
                     VaultError.UNEXPECTED -> R.string.error_unexpected
                 }
             ),

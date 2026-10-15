@@ -18,6 +18,13 @@
     <string name="error_storage">Не удалось прочитать или записать файл хранилища.</string>
     <string name="error_unexpected">Непредвиденная ошибка.</string>
     <string name="dismiss">Понятно</string>
+    <string name="error_biometric_lost">Отпечаток больше не действует: система уничтожила ключ, обычно после добавления нового отпечатка. Войдите мастер-паролем и включите отпечаток заново.</string>
+
+    <!-- Biometric unlock -->
+    <string name="biometric_unlock">Войти по отпечатку</string>
+    <string name="biometric_enable">Отпечаток</string>
+    <string name="biometric_forget">Забыть отпечаток</string>
+    <string name="biometric_prompt_title">Разблокировать хранилище</string>
 
     <!-- Vault -->
     <string name="empty_vault">Хранилище пустое. Добавьте первую запись.</string>

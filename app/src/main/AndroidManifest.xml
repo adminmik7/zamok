@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Normal permission, granted at install. Needed for the biometric unlock of the vault key;
+         the app runs without it and asks for the master password instead. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
     <!-- allowBackup=false: the vault must never leave the device via cloud backup
          or device-to-device transfer. -->
     <application

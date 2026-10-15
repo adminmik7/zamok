@@ -2,6 +2,7 @@ package dev.zamok.vault.ui
 
 import android.os.Handler
 import android.os.Looper
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +20,7 @@ data class VaultUiState(
     val busy: Boolean = false,
     val error: VaultError? = null,
     val entries: List<Entry> = emptyList(),
+    val biometricEnrolled: Boolean = false,
 )
 
 /**
@@ -33,6 +35,7 @@ enum class VaultError {
     WRONG_PASSWORD_OR_DAMAGED,
     PASSWORD_TOO_SHORT,
     STORAGE,
+    BIOMETRIC_LOST,
     UNEXPECTED,
 }
 
@@ -50,9 +53,11 @@ class VaultController(
     private val repository: VaultRepository,
     private val background: Executor = Executors.newSingleThreadExecutor(),
     private val main: Executor = Executor { command -> Handler(Looper.getMainLooper()).post(command) },
+    /** Whether this device can protect the vault key with a biometric unlock at all. */
+    val biometricSupported: Boolean = false,
 ) {
 
-    var state by mutableStateOf(VaultUiState(vaultExists = repository.vaultExists()))
+    var state by mutableStateOf(snapshot())
         private set
 
     fun create(password: String) {
@@ -67,7 +72,7 @@ class VaultController(
 
     fun lock() {
         repository.lock()
-        state = VaultUiState(vaultExists = repository.vaultExists())
+        state = snapshot()
     }
 
     fun add(entry: Entry) = submit { repository.add(entry) }
@@ -80,6 +85,41 @@ class VaultController(
         state = state.copy(error = null)
     }
 
+    // ---- Biometric unlock ----
+    //
+    // The prompt itself runs in the UI layer, which is what has an Activity. What arrives here is
+    // only the cipher the prompt unlocked, so the vault key never travels through a screen.
+
+    /** Stores a biometric copy of the open vault's key, sealed by [seal]. */
+    fun enableBiometricUnlock(seal: (ByteArray) -> ByteArray) =
+        submit { repository.enableBiometricUnlock(seal) }
+
+    /** Opens the vault with the key [open] recovers from the stored copy. */
+    fun unlockWithBiometrics(open: (ByteArray) -> ByteArray) =
+        submit { repository.unlockWithBiometrics(open) }
+
+    /** Drops the stored copy. The vault still opens with its password. */
+    fun forgetBiometricUnlock() = submit { repository.forgetBiometricUnlock() }
+
+    /** The IV of the stored copy, for building the decrypt cipher. Not secret. */
+    fun biometricIv(): ByteArray? = runCatching { repository.biometricIv() }.getOrNull()
+
+    /**
+     * Called when the Keystore key is gone before the prompt can even run — the platform destroys
+     * it when a new fingerprint is enrolled. The stored copy is worthless from then on.
+     */
+    fun onBiometricKeyLost() {
+        repository.forgetBiometricUnlock()
+        state = snapshot().copy(error = VaultError.BIOMETRIC_LOST)
+    }
+
+    private fun snapshot() = VaultUiState(
+        unlocked = repository.isUnlocked,
+        vaultExists = repository.vaultExists(),
+        entries = repository.entries,
+        biometricEnrolled = repository.biometricUnlockEnrolled(),
+    )
+
     private fun submit(action: () -> Unit) {
         // A second tap while the first is still running would run the KDF twice over the same state.
         if (state.busy) return
@@ -90,21 +130,25 @@ class VaultController(
             val failure = outcome.exceptionOrNull()
             main.execute {
                 state = if (failure == null) {
-                    VaultUiState(
-                        unlocked = repository.isUnlocked,
-                        vaultExists = repository.vaultExists(),
-                        entries = repository.entries,
-                    )
+                    snapshot()
                 } else {
                     // Leave the entries alone: the change never reached disk, so showing it would
-                    // promise the user something the vault does not hold.
-                    state.copy(busy = false, error = failure.toVaultError())
+                    // promise the user something the vault does not hold. The enrolment flag is
+                    // re-read, because a failed biometric unlock removes the stored copy.
+                    state.copy(
+                        busy = false,
+                        error = failure.toVaultError(),
+                        biometricEnrolled = repository.biometricUnlockEnrolled(),
+                    )
                 }
             }
         }
     }
 
     private fun Throwable.toVaultError(): VaultError = when (this) {
+        // Checked before VaultCryptoException and before anything generic: it is a subtype of
+        // InvalidKeyException, and the user needs to be told the fingerprint no longer works.
+        is KeyPermanentlyInvalidatedException -> VaultError.BIOMETRIC_LOST
         is VaultCryptoException -> VaultError.WRONG_PASSWORD_OR_DAMAGED
         is IOException -> VaultError.STORAGE
         else -> VaultError.UNEXPECTED

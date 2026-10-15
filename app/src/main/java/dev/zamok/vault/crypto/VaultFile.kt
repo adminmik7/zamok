@@ -97,6 +97,21 @@ class VaultFile private constructor(
     }
 
     /**
+     * Opens the vault with a vault key recovered elsewhere, skipping the KDF entirely.
+     *
+     * This is the other half of the two-layer key design: biometric unlock hands over the vault
+     * key from the Keystore instead of unwrapping it with a password.
+     *
+     * @throws VaultCryptoException if the key does not match this vault's payload.
+     */
+    fun unlockWithVaultKey(vaultKey: ByteArray): VaultSession {
+        require(vaultKey.size == VaultCrypto.KEY_BYTES) {
+            "Vault key must be ${VaultCrypto.KEY_BYTES} bytes, was ${vaultKey.size}"
+        }
+        return VaultSession(vaultKey.copyOf(), iterations, salt, wrappedKey, payload)
+    }
+
+    /**
      * Re-wraps the vault key under [new]. The payload is not re-encrypted, so this is cheap even
      * for a large vault. [current] is verified first.
      *
@@ -232,6 +247,13 @@ class VaultSession internal constructor(
         val sealedPayload = VaultCrypto.seal(vaultKey, plaintext, VaultLayout.PAYLOAD_AAD)
         return VaultFile.of(iterations, salt, wrappedKey, sealedPayload)
     }
+
+    /**
+     * A copy of the vault key, for handing to the Keystore-protected copy.
+     *
+     * A copy, so the receiver wiping it cannot leave this session holding a zeroed key.
+     */
+    internal fun vaultKeyCopy(): ByteArray = vaultKey.copyOf()
 
     /** Drops the vault key. The session is unusable afterwards. */
     fun close() {
