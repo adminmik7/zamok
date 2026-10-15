@@ -68,7 +68,7 @@ internal object KeystoreVaultKey {
      * has to re-enrol either way, and the app already maps it to the right message.
      */
     private fun existingKey(): SecretKey =
-        keyStore().getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry
+        (keyStore().getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
             ?: throw KeyPermanentlyInvalidatedException(
                 "The biometric Keystore key is gone, so the stored copy cannot be opened"
             )
