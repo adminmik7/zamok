@@ -55,4 +55,11 @@
     <string name="class_uppercase">Прописные (A-Z)</string>
     <string name="class_digits">Цифры (0-9)</string>
     <string name="class_symbols">Символы (!@#$…)</string>
+
+    <!-- Backup -->
+    <string name="backup_menu">Копия</string>
+    <string name="backup_save">Сохранить копию</string>
+    <string name="backup_restore">Восстановить из копии</string>
+    <string name="backup_password">Пароль копии</string>
+    <string name="backup_restore_warning">Записи в хранилище будут заменены содержимым копии. Если копия не откроется или окажется повреждённой, ничего не изменится.</string>
 </resources>

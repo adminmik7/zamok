@@ -10,6 +10,8 @@ import dev.zamok.vault.crypto.VaultCryptoException
 import dev.zamok.vault.data.VaultRepository
 import dev.zamok.vault.model.Entry
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -84,6 +86,20 @@ class VaultController(
     fun dismissError() {
         state = state.copy(error = null)
     }
+
+    // ---- Backup ----
+    //
+    // The stream comes from the UI, which is what holds the uri the user picked and the
+    // ContentResolver that can open it. Nothing Android-shaped reaches the repository, so the
+    // part worth testing — what a restore may overwrite and what it must leave alone — is still
+    // ordinary code.
+
+    /** Copies the encrypted vault into the stream [open] hands back. */
+    fun export(open: () -> OutputStream) = submit { open().use { repository.exportTo(it) } }
+
+    /** Replaces the vault with the backup in [open]'s stream, which is opened with [password]. */
+    fun restore(open: () -> InputStream, password: String) =
+        submit { open().use { repository.restore(it, password.toCharArray()) } }
 
     // ---- Biometric unlock ----
     //

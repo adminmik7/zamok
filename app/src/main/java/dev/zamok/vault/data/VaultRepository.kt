@@ -7,6 +7,8 @@ import dev.zamok.vault.crypto.wipe
 import dev.zamok.vault.model.Entry
 import dev.zamok.vault.model.Vault
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.security.GeneralSecurityException
 import java.util.UUID
 
@@ -140,6 +142,62 @@ class VaultRepository(
         store.write(rotated.encode())
         // The vault key did not change, so the open session and any biometric copy stay good.
         file = rotated
+    }
+
+    // ---- Backup ----
+    //
+    // A backup is the vault file itself, byte for byte. It is already encrypted under the master
+    // password, so copying it out needs no second password to invent and none to forget. What it
+    // does not do is open anywhere but in Zamok: the format is this app's own.
+
+    /**
+     * Writes the encrypted vault, exactly as it sits on disk, to [out]. The caller closes it.
+     *
+     * This works while locked as well — the bytes are ciphertext, and a backup is worth being able
+     * to take without typing the password.
+     *
+     * @throws java.io.IOException if there is no vault or the stream refuses the bytes.
+     */
+    fun exportTo(out: OutputStream) {
+        out.write(store.read())
+        out.flush()
+    }
+
+    /**
+     * Replaces the vault with the backup read from [input], which must open with [masterPassword].
+     *
+     * The backup is opened and decoded *before* anything on disk is touched, because this is the
+     * one operation in the app whose failure can cost every password at once. Wrong password, a
+     * file that is not a backup, a truncated one — all of them leave the current vault exactly as
+     * it was. Once the new bytes are written the vault is reopened from disk.
+     *
+     * The current vault's password is deliberately not demanded. A backup has to be opened with its
+     * own password anyway, and an unlocked vault is already readable and writable by whoever holds
+     * the phone, so asking again would be friction without protection.
+     *
+     * @throws VaultCryptoException if the backup cannot be opened or does not hold a vault.
+     * @throws java.io.IOException if the stream cannot be read or the vault cannot be written.
+     */
+    fun restore(input: InputStream, masterPassword: CharArray) {
+        val bytes = input.readBytes()
+
+        val backup = VaultFile.parse(bytes)
+        val backupSession = backup.unlock(masterPassword)
+        try {
+            // Authenticating the payload is not enough: a backup whose plaintext is not a vault at
+            // all would be accepted here and only fail later, on every unlock, once the working
+            // vault had already been overwritten.
+            VaultCodec.decode(backupSession.readPayload())
+        } finally {
+            backupSession.close()
+        }
+
+        lock()
+        store.write(bytes)
+        // The restored vault has its own vault key, so the biometric copy belongs to the vault that
+        // just went away and could never open this one.
+        forgetBiometricUnlock()
+        unlock(masterPassword)
     }
 
     // ---- Biometric unlock ----

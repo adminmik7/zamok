@@ -3,9 +3,13 @@ package dev.zamok.vault.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +25,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +56,10 @@ import dev.zamok.vault.crypto.CharClass
 import dev.zamok.vault.crypto.KeystoreVaultKey
 import dev.zamok.vault.crypto.PasswordGenerator
 import dev.zamok.vault.model.Entry
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 /**
@@ -144,6 +154,22 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
 private fun VaultScreen(controller: VaultController, state: VaultUiState) {
     var editing by remember { mutableStateOf<Entry?>(null) }
     var adding by remember { mutableStateOf(false) }
+    var backupMenuOpen by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    val context = LocalContext.current
+    val backupFileName = remember { "zamok-${LocalDate.now()}$BACKUP_FILE_EXTENSION" }
+
+    // The picker hands back a uri, and turning it into a stream stays here: the repository has no
+    // business knowing what a ContentResolver is.
+    val saveBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(BACKUP_MIME_TYPE),
+    ) { uri -> if (uri != null) controller.export { context.openOutput(uri) } }
+
+    val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        // Picking a file only gets it asked about; nothing is read until the user confirms.
+        if (uri != null) restoreUri = uri
+    }
 
     Scaffold(
         topBar = {
@@ -152,6 +178,32 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
                 actions = {
                     if (controller.biometricSupported && !state.biometricEnrolled) {
                         EnableBiometricAction(controller, enabled = !state.busy)
+                    }
+                    Box {
+                        TextButton(onClick = { backupMenuOpen = true }, enabled = !state.busy) {
+                            Text(stringResource(R.string.backup_menu))
+                        }
+                        DropdownMenu(
+                            expanded = backupMenuOpen,
+                            onDismissRequest = { backupMenuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.backup_save)) },
+                                onClick = {
+                                    backupMenuOpen = false
+                                    saveBackup.launch(backupFileName)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.backup_restore)) },
+                                onClick = {
+                                    backupMenuOpen = false
+                                    // Any type: a picker cannot know a Zamok backup, and the
+                                    // file's own header is what decides whether it opens.
+                                    pickBackup.launch(arrayOf("*/*"))
+                                },
+                            )
+                        }
                     }
                     TextButton(onClick = { controller.lock() }) {
                         Text(stringResource(R.string.lock))
@@ -199,6 +251,16 @@ private fun VaultScreen(controller: VaultController, state: VaultUiState) {
             onDismiss = { editing = null },
             onSave = { controller.update(it); editing = null },
             onDelete = { controller.delete(entry.id); editing = null },
+        )
+    }
+
+    restoreUri?.let { uri ->
+        RestoreDialog(
+            onDismiss = { restoreUri = null },
+            onRestore = { password ->
+                controller.restore({ context.openInput(uri) }, password)
+                restoreUri = null
+            },
         )
     }
 }
@@ -310,6 +372,16 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+
+/**
+ * Opens the document the user picked. It lives in the UI because a `ContentResolver` does, and the
+ * vault only ever sees the stream.
+ */
+private fun Context.openOutput(uri: Uri): OutputStream =
+    contentResolver.openOutputStream(uri) ?: throw IOException("Cannot write to $uri")
+
+private fun Context.openInput(uri: Uri): InputStream =
+    contentResolver.openInputStream(uri) ?: throw IOException("Cannot read $uri")
 
 @Composable
 private fun EntryRow(entry: Entry, onClick: () -> Unit) {
@@ -539,6 +611,47 @@ private fun PasswordGeneratorDialog(onDismiss: () -> Unit, onUse: (String) -> Un
             Row {
                 TextButton(onClick = { nonce++ }) { Text(stringResource(R.string.another_password)) }
                 TextButton(onClick = { onUse(password) }) { Text(stringResource(R.string.use_password)) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+private const val BACKUP_MIME_TYPE = "application/octet-stream"
+private const val BACKUP_FILE_EXTENSION = ".zmk"
+
+/**
+ * Asks for the backup's own password before anything is read.
+ *
+ * The warning is not decoration: this is the one action in the app that can replace every password
+ * at once. What it promises is true — the vault file is only overwritten once the backup has been
+ * opened and decoded.
+ */
+@Composable
+private fun RestoreDialog(onDismiss: () -> Unit, onRestore: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.backup_restore)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.backup_restore_warning))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.backup_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onRestore(password) }, enabled = password.isNotEmpty()) {
+                Text(stringResource(R.string.backup_restore))
             }
         },
         dismissButton = {
