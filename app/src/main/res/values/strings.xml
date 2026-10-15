@@ -1,4 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Zamok</string>
+
+    <!-- Unlock -->
+    <string name="create_title">Придумайте мастер-пароль</string>
+    <string name="create_hint">Он шифрует хранилище. Забыли — восстановить нельзя: в файле нет ничего, чем можно было бы его открыть.</string>
+    <string name="unlock_title">Введите мастер-пароль</string>
+    <string name="master_password">Мастер-пароль</string>
+    <string name="create_vault">Создать хранилище</string>
+    <string name="open_vault">Открыть</string>
+    <string name="show_password">Показать</string>
+    <string name="hide_password">Скрыть</string>
+
+    <!-- Errors -->
+    <string name="error_wrong_password">Неверный пароль или повреждённый файл. Отличить одно от другого невозможно: оба случая дают одну и ту же ошибку шифрования.</string>
+    <string name="error_password_too_short">Мастер-пароль короче 8 символов.</string>
+    <string name="error_storage">Не удалось прочитать или записать файл хранилища.</string>
+    <string name="error_unexpected">Непредвиденная ошибка.</string>
+    <string name="dismiss">Понятно</string>
+
+    <!-- Vault -->
+    <string name="empty_vault">Хранилище пустое. Добавьте первую запись.</string>
+    <string name="add_entry">Добавить</string>
+    <string name="lock">Закрыть</string>
+    <string name="untitled">Без названия</string>
+
+    <!-- Entry -->
+    <string name="new_entry">Новая запись</string>
+    <string name="edit_entry">Запись</string>
+    <string name="field_title">Название</string>
+    <string name="field_username">Логин</string>
+    <string name="field_password">Пароль</string>
+    <string name="field_url">Адрес</string>
+    <string name="field_notes">Заметки</string>
+    <string name="field_category">Категория</string>
+    <string name="field_tags">Метки (через запятую)</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel">Отмена</string>
+    <string name="delete">Удалить</string>
 </resources>

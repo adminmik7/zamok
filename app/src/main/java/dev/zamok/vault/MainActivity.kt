@@ -1,45 +1,40 @@
 package dev.zamok.vault
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import dev.zamok.vault.ui.VaultApp
 
 class MainActivity : ComponentActivity() {
+
+    private val controller get() = (application as ZamokApplication).controller
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Without this, every password in the vault is one screenshot away, and the thumbnail in
+        // the recents switcher shows the list to anyone holding the phone.
+        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             MaterialTheme {
-                Scaffold { innerPadding ->
-                    Placeholder(Modifier.fillMaxSize().padding(innerPadding))
-                }
+                VaultApp(controller)
             }
         }
     }
-}
 
-/**
- * Throwaway screen: proves the toolchain builds and the APK installs.
- * Replaced by the unlock screen once the crypto core exists.
- */
-@Composable
-private fun Placeholder(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("Zamok", style = MaterialTheme.typography.headlineMedium)
-        Text("Каркас собран. Хранилище ещё не реализовано.", style = MaterialTheme.typography.bodyMedium)
+    /**
+     * The vault is open in memory whenever this app is off screen, so being off screen means being
+     * locked. That is the whole reason the app is trustworthy; a timeout would leave a window in
+     * which a picked-up phone still has every password in it.
+     *
+     * Rotating the device is not leaving: locking there would make the app feel broken, so it is
+     * excluded explicitly.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            controller.lock()
+        }
     }
 }

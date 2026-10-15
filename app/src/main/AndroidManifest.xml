@@ -4,6 +4,7 @@
     <!-- allowBackup=false: the vault must never leave the device via cloud backup
          or device-to-device transfer. -->
     <application
+        android:name=".ZamokApplication"
         android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
