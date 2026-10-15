@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import dev.zamok.vault.ui.BiometricPromptRunner
 import dev.zamok.vault.ui.VaultApp
 import dev.zamok.vault.ui.ZamokTheme
+import dev.zamok.vault.ui.promptBiometricUnlock
 
 class MainActivity : ComponentActivity() {
 
@@ -21,6 +22,35 @@ class MainActivity : ComponentActivity() {
             ZamokTheme {
                 VaultApp(controller)
             }
+        }
+    }
+
+    /**
+     * The fingerprint prompt is asked for here, not from the composition.
+     *
+     * The platform dialog only attaches to a window that is already on screen, and the first
+     * composition runs before the activity is resumed — which is why a prompt fired from a
+     * composable could simply never appear. Coming back to the app is also exactly the moment a
+     * locked vault should ask for a finger: nothing to tap first.
+     *
+     * Skipped while a prompt is already up, because on some devices showing it goes through
+     * another activity and this one would be resumed and ask all over again.
+     */
+    override fun onResume() {
+        super.onResume()
+        val state = controller.state
+        if (state.vaultExists &&
+            !state.unlocked &&
+            state.biometricEnrolled &&
+            controller.biometricSupported &&
+            !BiometricPromptRunner.promptActive
+        ) {
+            promptBiometricUnlock(
+                activity = this,
+                controller = controller,
+                title = getString(R.string.biometric_prompt_title),
+                cancelLabel = getString(R.string.cancel),
+            )
         }
     }
 

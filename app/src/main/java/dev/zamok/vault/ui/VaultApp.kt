@@ -38,7 +38,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,20 +95,11 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
     var passwordWanted by remember { mutableStateOf(false) }
     val creating = !state.vaultExists
 
-    val activity = LocalContext.current.findActivity()
-    val promptTitle = stringResource(R.string.biometric_prompt_title)
-    val cancelLabel = stringResource(R.string.cancel)
     val biometricsReady = !creating && state.biometricEnrolled && controller.biometricSupported
 
-    // The fingerprint prompt opens on its own: a locked vault is entered with a finger, not by
-    // tapping a button first. Appearing on screen is what triggers it, and the key only changes
-    // when biometrics stop being offered — so a prompt the user just cancelled does not come
-    // straight back at them.
-    LaunchedEffect(biometricsReady) {
-        if (biometricsReady && activity != null) {
-            promptBiometricUnlock(activity, controller, promptTitle, cancelLabel)
-        }
-    }
+    // The fingerprint prompt is not fired from here. It is asked for by the activity as it comes
+    // back to the screen, because the platform dialog can only attach to a window that is already
+    // visible — which a composable running its first composition is not yet.
 
     Column(
         modifier = Modifier

@@ -32,6 +32,15 @@ internal object BiometricPromptRunner {
     private var promptStartedAt = 0L
 
     /**
+     * Held for the life of the prompt on purpose.
+     *
+     * A `CancellationSignal` that is only a temporary can be garbage collected while the dialog is
+     * up, which on some implementations takes the authentication down with it — a prompt that never
+     * appears, or one that vanishes on its own. Keeping the reference costs nothing.
+     */
+    private var cancellation: CancellationSignal? = null
+
+    /**
      * True while a fingerprint prompt is plausibly up.
      *
      * Read by the activity before it auto-locks. The vault must not be locked underneath a dialog
@@ -62,22 +71,29 @@ internal object BiometricPromptRunner {
             .setNegativeButton(cancelLabel, executor) { _, _ -> }
             .build()
 
+        // A prompt that is already up would be cancelled by its own successor on some devices.
+        cancellation?.cancel()
+        val signal = CancellationSignal()
+        cancellation = signal
+
         promptStartedAt = SystemClock.elapsedRealtime()
         try {
             prompt.authenticate(
                 BiometricPrompt.CryptoObject(cipher),
-                CancellationSignal(),
+                signal,
                 executor,
                 object : BiometricPrompt.AuthenticationCallback() {
 
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         promptStartedAt = 0L
+                        cancellation = null
                         val authenticated = result.cryptoObject?.cipher
                         if (authenticated == null) onFailure(null) else onUnlocked(authenticated)
                     }
 
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         promptStartedAt = 0L
+                        cancellation = null
                         // Backing out is not an error worth a message; anything else is. Only the
                         // two cancellation codes the platform class actually publishes are checked
                         // — the negative button reports one of these.
@@ -98,6 +114,7 @@ internal object BiometricPromptRunner {
         } catch (failure: Exception) {
             // The platform refused the prompt outright, so it will never report anything.
             promptStartedAt = 0L
+            cancellation = null
             onFailure(failure.message)
         }
     }
