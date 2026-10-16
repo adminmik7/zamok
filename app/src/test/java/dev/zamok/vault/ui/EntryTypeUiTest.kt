@@ -1,5 +1,6 @@
 package dev.zamok.vault.ui
 
+import dev.zamok.vault.R
 import dev.zamok.vault.model.EntryField
 import dev.zamok.vault.model.EntryTypes
 import org.junit.Assert.assertEquals
@@ -30,7 +31,7 @@ class EntryTypeUiTest {
 
     @Test
     fun `records covered by the common fields ask for nothing extra`() {
-        for (type in listOf(EntryTypes.PASSWORD, EntryTypes.ONE_TIME_CODE, EntryTypes.NOTE)) {
+        for (type in listOf(EntryTypes.PASSWORD, EntryTypes.NOTE)) {
             assertTrue("$type should add no boxes", EntryTypeUi.specs(type).isEmpty())
         }
     }
@@ -38,6 +39,36 @@ class EntryTypeUiTest {
     @Test
     fun `a type this build has never heard of adds no boxes`() {
         assertTrue(EntryTypeUi.specs("drivers_licence").isEmpty())
+    }
+
+    @Test
+    fun `a login is the only record asked for a login, a code and tags`() {
+        val login = EntryTypeUi.commonFields(EntryTypes.PASSWORD)
+
+        for (field in listOf(R.string.field_username, R.string.field_password, R.string.field_url, R.string.field_totp, R.string.field_tags, R.string.field_favorite)) {
+            assertTrue("$field belongs on a login", field in login)
+        }
+    }
+
+    @Test
+    fun `a card, a passport and a note are not asked for the fields of a login`() {
+        for (type in listOf(EntryTypes.CARD, EntryTypes.PASSPORT, EntryTypes.NOTE)) {
+            assertTrue("$type should ask for no login fields", EntryTypeUi.commonFields(type).isEmpty())
+        }
+    }
+
+    @Test
+    fun `a type this build has never heard of is read as a login, fields and all`() {
+        assertEquals(
+            EntryTypeUi.commonFields(EntryTypes.PASSWORD),
+            EntryTypeUi.commonFields("drivers_licence"),
+        )
+    }
+
+    @Test
+    fun `the old one-time code kind is read as a login, so its code is still there`() {
+        assertEquals(EntryTypes.PASSWORD, EntryTypes.normalise("otp"))
+        assertTrue(R.string.field_totp in EntryTypeUi.commonFields(EntryTypes.normalise("otp")))
     }
 
     @Test

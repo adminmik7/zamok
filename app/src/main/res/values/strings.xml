@@ -86,7 +86,7 @@
 
     <!-- Record types -->
     <string name="type_password">Пароль</string>
-    <string name="type_otp">Одноразовый код</string>
+    
     <string name="type_card">Платёжная карта</string>
     <string name="type_note">Заметка</string>
     <string name="type_passport">Паспорт</string>
@@ -108,6 +108,9 @@
     <string name="field_favorite">В избранном</string>
     <string name="save">Сохранить</string>
     <string name="cancel">Отмена</string>
+    <string name="exit_title">Выйти из Zamok?</string>
+    <string name="exit_message">Приложение закроется. Всё, что сохранено, останется на месте.</string>
+    <string name="exit_confirm">Выйти</string>
     <string name="back">Назад</string>
     <string name="delete">Удалить</string>
 

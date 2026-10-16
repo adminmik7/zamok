@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,6 +63,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -140,6 +143,7 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     var order by remember { mutableStateOf(SortOrder.TITLE) }
 
     val searchFocus = remember { FocusRequester() }
+    var exitAsk by remember { mutableStateOf(false) }
 
     // The pickers hand back a uri, and turning it into a stream stays here: the repository has no
     // business knowing what a ContentResolver is.
@@ -190,6 +194,12 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     fun choose(action: () -> Unit) {
         scope.launch { drawerState.close() }
         action()
+    }
+
+    // Back from the list leaves the app, and a password manager is an app someone walks away from in
+    // the middle of something - so it asks. On the other tabs back does what the tab does.
+    BackHandler(enabled = tab != VaultTab.SECURITY && tab != VaultTab.TOOLS) {
+        exitAsk = true
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -443,6 +453,27 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
             onConfirm = {
                 csvExportOpen = false
                 saveCsv.launch(csvFileName)
+            },
+        )
+    }
+
+    if (exitAsk) {
+        AlertDialog(
+            onDismissRequest = { exitAsk = false },
+            title = { Text(stringResource(R.string.exit_title)) },
+            text = { Text(stringResource(R.string.exit_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        exitAsk = false
+                        context.findActivity()?.finish()
+                    },
+                ) { Text(stringResource(R.string.exit_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { exitAsk = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
             },
         )
     }

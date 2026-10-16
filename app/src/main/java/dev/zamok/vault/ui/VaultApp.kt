@@ -341,6 +341,9 @@ internal fun EntryDialog(
     // and this way a type the form has never seen needs no code here at all.
     val context = LocalContext.current
     val typeSpecs = EntryTypeUi.specs(type)
+    // A card has no login and a note has no password, so the form asks for what this kind of record
+    // is: everything else stays in the entry, untouched, and comes back if the type is changed.
+    val common = EntryTypeUi.commonFields(type)
     val typedValues = remember {
         mutableStateMapOf<String, String>().apply {
             initial.fields.forEach { field -> put(field.label, field.value) }
@@ -461,49 +464,65 @@ internal fun EntryDialog(
                     HorizontalDivider()
                 }
 
-                Field(R.string.field_username, username) { username = it }
-                Field(
-                    label = R.string.field_password,
-                    value = password,
-                    onValueChange = { password = it },
-                    visualTransformation = if (passwordVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (password.isNotEmpty()) {
-                        TextButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Text(stringResource(if (passwordVisible) R.string.hide_password else R.string.show_password))
+                if (R.string.field_username in common) {
+                    Field(R.string.field_username, username) { username = it }
+                }
+                if (R.string.field_password in common) {
+                    Field(
+                        label = R.string.field_password,
+                        value = password,
+                        onValueChange = { password = it },
+                        visualTransformation = if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (password.isNotEmpty()) {
+                            TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Text(
+                                    stringResource(
+                                        if (passwordVisible) R.string.hide_password else R.string.show_password
+                                    )
+                                )
+                            }
+                        }
+                        TextButton(onClick = { generatorOpen = true }) {
+                            Text(stringResource(R.string.generate_password))
                         }
                     }
-                    TextButton(onClick = { generatorOpen = true }) {
-                        Text(stringResource(R.string.generate_password))
-                    }
                 }
-                Field(R.string.field_url, url) { url = it }
-                Field(R.string.field_tags, tags) { tags = it }
-                Field(R.string.field_totp, totpSecret) { totpSecret = it }
-                if (totpSecret.isNotBlank() && Totp.parse(totpSecret) == null) {
-                    // Said here rather than by a missing code in the list later: a key that was
-                    // pasted wrong would otherwise just quietly never produce a code.
-                    Text(
-                        text = stringResource(R.string.totp_invalid),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                if (R.string.field_url in common) {
+                    Field(R.string.field_url, url) { url = it }
+                }
+                if (R.string.field_tags in common) {
+                    Field(R.string.field_tags, tags) { tags = it }
+                }
+                if (R.string.field_totp in common) {
+                    Field(R.string.field_totp, totpSecret) { totpSecret = it }
+                    if (totpSecret.isNotBlank() && Totp.parse(totpSecret) == null) {
+                        // Said here rather than by a missing code in the list later: a key that was
+                        // pasted wrong would otherwise just quietly never produce a code.
+                        Text(
+                            text = stringResource(R.string.totp_invalid),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
                 Field(R.string.field_notes, notes, singleLine = false) { notes = it }
 
                 // A password manager is where a password gets picked, so marking one matters more
                 // here than the field deserves on its own.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = favorite,
-                        onCheckedChange = { favorite = it },
-                    )
-                    Text(stringResource(R.string.field_favorite))
+                if (R.string.field_favorite in common) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = favorite,
+                            onCheckedChange = { favorite = it },
+                        )
+                        Text(stringResource(R.string.field_favorite))
+                    }
                 }
             }
         }

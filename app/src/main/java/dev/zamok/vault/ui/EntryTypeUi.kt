@@ -33,7 +33,6 @@ internal data class FieldSpec(val label: Int, val secret: Boolean = false)
 internal object EntryTypeUi {
 
     fun label(id: String): Int = when (EntryTypes.normalise(id)) {
-        EntryTypes.ONE_TIME_CODE -> R.string.type_otp
         EntryTypes.CARD -> R.string.type_card
         EntryTypes.NOTE -> R.string.type_note
         EntryTypes.PASSPORT -> R.string.type_passport
@@ -41,7 +40,6 @@ internal object EntryTypeUi {
     }
 
     fun icon(id: String): ImageVector = when (EntryTypes.normalise(id)) {
-        EntryTypes.ONE_TIME_CODE -> Icons.Filled.Refresh
         EntryTypes.CARD -> Icons.Filled.ShoppingCart
         EntryTypes.NOTE -> Icons.Filled.Create
         EntryTypes.PASSPORT -> Icons.Filled.Person
@@ -49,7 +47,32 @@ internal object EntryTypeUi {
     }
 
     /**
-     * The boxes a record of [id] fills in on top of the fields every record has.
+ * The fields of the ordinary record that a record of [id] is asked for.
+ *
+ * Only a login has a login, an address, a code and tags: on a card or a passport those questions have
+ * no answer, and asking them anyway is what makes a form long enough to scroll. A note has only a
+ * title and text, so it gets neither.
+ *
+ * Listed as labels rather than drawn here, so the screen stays the place that draws fields and this
+ * stays the place that knows what belongs to a kind of record. A field left out is not cleared: it
+ * keeps whatever was in it, and shows again if the type is changed back.
+ */
+fun commonFields(id: String): List<Int> =
+    if (EntryTypes.normalise(id) == EntryTypes.PASSWORD) {
+        listOf(
+            R.string.field_username,
+            R.string.field_password,
+            R.string.field_url,
+            R.string.field_tags,
+            R.string.field_totp,
+            R.string.field_favorite,
+        )
+    } else {
+        emptyList()
+    }
+
+/**
+ * The boxes a record of [id] fills in on top of the fields every record has.
      *
      * Only cards and passports so far: a login and a note are covered by the fields every record
      * already has, and inventing boxes for them would be asking for something nobody needs.
