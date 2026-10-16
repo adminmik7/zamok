@@ -36,12 +36,13 @@ CI:
 подхватывает его сам, системный JDK и правка `PATH` не нужны:
 
 ```
-build.cmd clean
-build.cmd :app:assembleDebug
-build.cmd :app:testDebugUnitTest
+build.cmd                          сборка debug APK
+build.cmd clean                    очистка
+build.cmd :app:testDebugUnitTest   тесты
 ```
 
-APK оказывается в `app\build\outputs\apk\debug\app-debug.apk`. В `.toolchain/`: JDK 17 (Temurin),
+Готовый APK ложится в `output\zamok-debug.apk`. Без аргументов `build.cmd` собирает именно его,
+с аргументами — передаёт их обёртке Gradle как есть. В `.toolchain/`: JDK 17 (Temurin),
 Android SDK (`platforms;android-36`, `build-tools;36.0.0`) и домашний каталог Gradle с
 дистрибутивом 9.6.0 и кэшем зависимостей. `local.properties` указывает на этот SDK, `build.cmd`
 ставит `JAVA_HOME` и `GRADLE_USER_HOME` и зовёт `gradlew.bat`.

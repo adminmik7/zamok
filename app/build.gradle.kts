@@ -71,3 +71,10 @@ dependencies {
 
     testImplementation(libs.junit)
 }
+
+tasks.register<Copy>("apk") {
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(rootProject.file("output"))
+    rename("app-debug.apk", "zamok-debug.apk")
+}
