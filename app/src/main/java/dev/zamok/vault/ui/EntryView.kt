@@ -176,20 +176,21 @@ internal fun EntryView(
                         entry = entry,
                         numberVisible = cardNumberVisible,
                         onToggleNumber = { cardNumberVisible = !cardNumberVisible },
+                        onChange = { updated -> onChange(updated) },
                     )
                 } else {
                     EntryAvatar(entry)
+                    InlineValue(
+                        value = entry.title,
+                        placeholder = stringResource(R.string.field_title),
+                        editing = editingField == TITLE,
+                        onStartEditing = { editingField = TITLE },
+                        onStopEditing = { editingField = -1 },
+                        onCommit = { typed -> change { it.copy(title = typed) } },
+                        style = MaterialTheme.typography.headlineSmall,
+                        weight = FontWeight.Bold,
+                    )
                 }
-                InlineValue(
-                    value = entry.title,
-                    placeholder = stringResource(R.string.field_title),
-                    editing = editingField == TITLE,
-                    onStartEditing = { editingField = TITLE },
-                    onStopEditing = { editingField = -1 },
-                    onCommit = { typed -> change { it.copy(title = typed) } },
-                    style = MaterialTheme.typography.headlineSmall,
-                    weight = FontWeight.Bold,
-                )
                 if (entry.username.isNotEmpty()) {
                     InlineValue(
                         value = entry.username,

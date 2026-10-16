@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,7 +52,22 @@ internal fun CardFace(
     entry: Entry,
     numberVisible: Boolean,
     onToggleNumber: () -> Unit,
+    onChange: (Entry) -> Unit,
 ) {
+    // Which of the card's own lines is being typed into, or none of them. The card is the only place
+    // the number, the holder and the expiry are shown, so it is also the only place they are edited.
+    var editing by remember { mutableStateOf(-1) }
+    var typed by remember { mutableStateOf("") }
+
+    fun edit(slot: Int, labelRes: Int, format: (String) -> String = { it }) {
+        editing = slot
+        typed = format(fieldValue(entry.fields, stringResource(labelRes)))
+    }
+
+    fun commit(slot: Int, labelRes: Int, format: (String) -> String = { it }) {
+        onChange(entry.withField(labelRes, format(typed)))
+        editing = -1
+    }
     val number = fieldValue(entry.fields, stringResource(R.string.field_card_number))
     val holder = fieldValue(entry.fields, stringResource(R.string.field_card_holder))
     val expiry = formatExpiry(fieldValue(entry.fields, stringResource(R.string.field_card_expiry)))
@@ -68,15 +84,35 @@ internal fun CardFace(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = entry.title.ifBlank { stringResource(R.string.untitled) },
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            if (editing == SLOT_TITLE) {
+                var name by remember { mutableStateOf(typed) }
+                CardEditField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        typed = it
+                    },
+                    onCommit = {
+                        onChange(entry.copy(title = name))
+                        editing = -1
+                    },
+                )
+            } else {
+                Text(
+                    text = entry.title.ifBlank { stringResource(R.string.untitled) },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            typed = entry.title
+                            editing = SLOT_TITLE
+                        },
+                )
+            }
             if (brand != CardBrand.UNKNOWN) {
                 Text(
                     text = brand.label,
@@ -93,14 +129,24 @@ internal fun CardFace(
             modifier = Modifier.size(36.dp),
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = if (numberVisible) groupCardNumber(number, brand) else maskCardNumber(number),
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            if (editing == SLOT_NUMBER) {
+                CardEditField(
+                    value = typed,
+                    onValueChange = { typed = groupCardNumber(it) },
+                    onCommit = { commit(SLOT_NUMBER, R.string.field_card_number, ::groupCardNumber) },
+                )
+            } else {
+                Text(
+                    text = if (numberVisible) groupCardNumber(number, brand) else maskCardNumber(number),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { edit(SLOT_NUMBER, R.string.field_card_number, ::groupCardNumber) },
+                )
+            }
             IconButton(onClick = onToggleNumber) {
                 Icon(
                     imageVector = if (numberVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
@@ -120,13 +166,22 @@ internal fun CardFace(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = holder,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (editing == SLOT_HOLDER) {
+                    CardEditField(
+                        value = typed,
+                        onValueChange = { typed = it },
+                        onCommit = { commit(SLOT_HOLDER, R.string.field_card_holder) },
+                    )
+                } else {
+                    Text(
+                        text = holder.ifBlank { stringResource(R.string.field_empty) },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { edit(SLOT_HOLDER, R.string.field_card_holder) },
+                    )
+                }
             }
             Column {
                 Text(
@@ -134,7 +189,20 @@ internal fun CardFace(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.7f),
                 )
-                Text(text = expiry, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                if (editing == SLOT_EXPIRY) {
+                    CardEditField(
+                        value = typed,
+                        onValueChange = { typed = formatExpiry(it) },
+                        onCommit = { commit(SLOT_EXPIRY, R.string.field_card_expiry, ::formatExpiry) },
+                    )
+                } else {
+                    Text(
+                        text = expiry,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        modifier = Modifier.clickable { edit(SLOT_EXPIRY, R.string.field_card_expiry, ::formatExpiry) },
+                    )
+                }
             }
         }
     }
@@ -143,28 +211,14 @@ internal fun CardFace(
 private val CARD_GRADIENT = listOf(Color(0xFF2B5CB8), Color(0xFF6C8FE0))
 
 /**
- * The card's own fields below it, each editable where it is shown and each hidden until it is asked
- * for. A number is grouped as it is typed and an expiry is shortened to its two pairs, so what is
- * typed is already what is printed.
+ * The two fields of a card that are not printed on it: the CVV and the PIN.
+ *
+ * The number, the holder and the expiry are on the card above and are not repeated here - the same
+ * value said twice on one screen is read twice and has to be kept straight, which is exactly what
+ * a screen like this should not ask of a person.
  */
 @Composable
 internal fun CardDetails(entry: Entry, onChange: (Entry) -> Unit) {
-    CardField(
-        entry = entry,
-        label = R.string.field_card_number,
-        secret = true,
-        format = { groupCardNumber(it) },
-    ) { value ->
-        onChange(entry.withField(R.string.field_card_number, value))
-    }
-    CardField(
-        entry = entry,
-        label = R.string.field_card_expiry,
-        secret = false,
-        format = { formatExpiry(it) },
-    ) { value ->
-        onChange(entry.withField(R.string.field_card_expiry, value))
-    }
     CardField(entry = entry, label = R.string.field_card_cvv, secret = true) { value ->
         onChange(entry.withField(R.string.field_card_cvv, value))
     }
@@ -292,4 +346,38 @@ internal object FieldLabels {
         R.string.field_passport_valid_until -> "Действителен до"
         else -> ""
     }
+}
+
+private const val SLOT_NUMBER = 0
+private const val SLOT_HOLDER = 1
+private const val SLOT_EXPIRY = 2
+private const val SLOT_TITLE = 3
+
+/**
+ * A line of the card being typed into, drawn as plain white text on the card itself.
+ *
+ * No box around it: a field with a border on a card is not something a card has, and the line it
+ * replaces is the only sign that the card can be written on.
+ */
+@Composable
+private fun CardEditField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onCommit: () -> Unit,
+) {
+    androidx.compose.foundation.text.BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
+        cursorBrush = SolidColor(Color.White),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+        ),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            onDone = { onCommit() },
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
