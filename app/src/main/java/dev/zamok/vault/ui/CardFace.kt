@@ -58,16 +58,9 @@ internal fun CardFace(
     // the number, the holder and the expiry are shown, so it is also the only place they are edited.
     var editing by remember { mutableStateOf(-1) }
     var typed by remember { mutableStateOf("") }
-
-    fun edit(slot: Int, labelRes: Int, format: (String) -> String = { it }) {
-        editing = slot
-        typed = format(fieldValue(entry.fields, stringResource(labelRes)))
-    }
-
-    fun commit(slot: Int, labelRes: Int, format: (String) -> String = { it }) {
-        onChange(entry.withField(labelRes, format(typed)))
-        editing = -1
-    }
+    val numberName = stringResource(R.string.field_card_number)
+    val holderName = stringResource(R.string.field_card_holder)
+    val expiryName = stringResource(R.string.field_card_expiry)
     val number = fieldValue(entry.fields, stringResource(R.string.field_card_number))
     val holder = fieldValue(entry.fields, stringResource(R.string.field_card_holder))
     val expiry = formatExpiry(fieldValue(entry.fields, stringResource(R.string.field_card_expiry)))
@@ -133,7 +126,10 @@ internal fun CardFace(
                 CardEditField(
                     value = typed,
                     onValueChange = { typed = groupCardNumber(it) },
-                    onCommit = { commit(SLOT_NUMBER, R.string.field_card_number, ::groupCardNumber) },
+                    onCommit = {
+                        onChange(entry.withField(R.string.field_card_number, groupCardNumber(typed)))
+                        editing = -1
+                    },
                 )
             } else {
                 Text(
@@ -144,7 +140,10 @@ internal fun CardFace(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { edit(SLOT_NUMBER, R.string.field_card_number, ::groupCardNumber) },
+                        .clickable {
+                            typed = groupCardNumber(fieldValue(entry.fields, numberName))
+                            editing = SLOT_NUMBER
+                        },
                 )
             }
             IconButton(onClick = onToggleNumber) {
@@ -170,7 +169,10 @@ internal fun CardFace(
                     CardEditField(
                         value = typed,
                         onValueChange = { typed = it },
-                        onCommit = { commit(SLOT_HOLDER, R.string.field_card_holder) },
+                        onCommit = {
+                            onChange(entry.withField(R.string.field_card_holder, typed))
+                            editing = -1
+                        },
                     )
                 } else {
                     Text(
@@ -179,7 +181,10 @@ internal fun CardFace(
                         color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable { edit(SLOT_HOLDER, R.string.field_card_holder) },
+                        modifier = Modifier.clickable {
+                            typed = fieldValue(entry.fields, holderName)
+                            editing = SLOT_HOLDER
+                        },
                     )
                 }
             }
@@ -193,14 +198,20 @@ internal fun CardFace(
                     CardEditField(
                         value = typed,
                         onValueChange = { typed = formatExpiry(it) },
-                        onCommit = { commit(SLOT_EXPIRY, R.string.field_card_expiry, ::formatExpiry) },
+                        onCommit = {
+                            onChange(entry.withField(R.string.field_card_expiry, formatExpiry(typed)))
+                            editing = -1
+                        },
                     )
                 } else {
                     Text(
                         text = expiry,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White,
-                        modifier = Modifier.clickable { edit(SLOT_EXPIRY, R.string.field_card_expiry, ::formatExpiry) },
+                        modifier = Modifier.clickable {
+                            typed = formatExpiry(fieldValue(entry.fields, expiryName))
+                            editing = SLOT_EXPIRY
+                        },
                     )
                 }
             }
