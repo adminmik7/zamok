@@ -47,7 +47,7 @@ import dev.zamok.vault.model.EntryField
  * by anyway.
  */
 @Composable
-private fun CardFace(
+internal fun CardFace(
     entry: Entry,
     numberVisible: Boolean,
     onToggleNumber: () -> Unit,
@@ -148,7 +148,7 @@ private val CARD_GRADIENT = listOf(Color(0xFF2B5CB8), Color(0xFF6C8FE0))
  * typed is already what is printed.
  */
 @Composable
-private fun CardDetails(entry: Entry, onChange: (Entry) -> Unit) {
+internal fun CardDetails(entry: Entry, onChange: (Entry) -> Unit) {
     CardField(
         entry = entry,
         label = R.string.field_card_number,

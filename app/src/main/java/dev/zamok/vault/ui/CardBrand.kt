@@ -5,9 +5,9 @@ import dev.zamok.vault.model.EntryField
 /** The payment networks a card number can belong to, and how a card is drawn for each. */
 enum class CardBrand(val label: String, val lengths: IntRange, val groupSize: Int) {
     VISA("Visa", 13..19, 4),
-    MASTERCARD("Mastercard", 16, 4),
+    MASTERCARD("Mastercard", 16..16, 4),
     MIR("МИР", 16..19, 4),
-    AMEX("American Express", 15, 4),
+    AMEX("American Express", 15..15, 4),
     JCB("JCB", 16..19, 4),
     DISCOVER("Discover", 16..19, 4),
     UNION_PAY("UnionPay", 16..19, 4),
