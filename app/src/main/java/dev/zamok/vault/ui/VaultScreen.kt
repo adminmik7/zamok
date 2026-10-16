@@ -200,10 +200,15 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     // the middle of something - so it asks. From the other tabs it comes back to the list first,
     // since that is the screen the app is about and the tabs were only a detour from it.
     BackHandler {
-        if (tab == VaultTab.SECURITY || tab == VaultTab.TOOLS) {
-            tab = VaultTab.VAULT
-        } else {
-            exitAsk = true
+        when (tab) {
+            // The search tab is the same list with the caret in the field, so back puts the caret
+            // away: the filter it made goes with it, and the list it was filtering is left standing.
+            VaultTab.SEARCH -> {
+                query = ""
+                tab = VaultTab.VAULT
+            }
+            VaultTab.SECURITY, VaultTab.TOOLS -> tab = VaultTab.VAULT
+            VaultTab.VAULT -> exitAsk = true
         }
     }
 
