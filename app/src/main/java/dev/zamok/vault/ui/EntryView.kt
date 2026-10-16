@@ -82,6 +82,10 @@ internal fun EntryView(
     var passwordVisible by remember { mutableStateOf(false) }
     var cardNumberVisible by remember { mutableStateOf(false) }
     val isCard = EntryTypes.normalise(entry.type) == EntryTypes.CARD
+    // A card and a passport carry fields of their own, and those are filled in where the rest of
+    // the record is: the form behind the pencil. A record with no fields of its own has nothing but
+    // the ones the form would add, so the chip stays where a field can be added from here.
+    val typeSpecsEmpty = EntryTypeUi.specs(entry.type).isEmpty()
     var menuOpen by remember { mutableStateOf(false) }
     var editingField by remember { mutableStateOf(-1) }
 
@@ -224,41 +228,38 @@ internal fun EntryView(
                         onCommit = { typed -> change { it.copy(password = typed) } },
                     )
                 }
-                for ((index, field) in entry.fields.withIndex()) {
-                    CustomFieldRow(
-                        field = field,
-                        editing = editingField == FIELD_BASE + index,
-                        onStartEditing = { editingField = FIELD_BASE + index },
-                        onStopEditing = { editingField = -1 },
-                        onCommit = { label, value ->
-                            change { entry ->
-                                entry.copy(
-                                    fields = entry.fields.toMutableList().also { list ->
-                                        list[index] = field.copy(label = label, value = value)
-                                    },
-                                )
-                            }
-                        },
-                    )
-                }
                 }
             }
 
-            TextButton(
-                onClick = { change { it.copy(fields = it.fields + EntryField("", "")) } },
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Text(stringResource(R.string.add_field), Modifier.padding(start = 8.dp))
+            if (typeSpecsEmpty) {
+                TextButton(
+                    onClick = { change { it.copy(fields = it.fields + EntryField("", "")) } },
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text(stringResource(R.string.add_field), Modifier.padding(start = 8.dp))
+                }
+            }
+
+            for ((index, field) in entry.fields.withIndex()) {
+                CustomFieldRow(
+                    field = field,
+                    editing = editingField == FIELD_BASE + index,
+                    onStartEditing = { editingField = FIELD_BASE + index },
+                    onStopEditing = { editingField = -1 },
+                    onCommit = { label, value ->
+                        change { entry ->
+                            entry.copy(
+                                fields = entry.fields.toMutableList().also { list ->
+                                    list[index] = field.copy(label = label, value = value)
+                                },
+                            )
+                        }
+                    },
+                )
             }
 
             HorizontalDivider()
 
-            if (isCard) {
-                CardDetails(
-                    entry = entry,
-                    onChange = { updated -> onChange(updated) },
-                )
-            }
             if (entry.username.isNotEmpty()) {
                 DetailRow(stringResource(R.string.field_username), entry.username)
             }
