@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -57,10 +59,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -434,7 +438,8 @@ internal fun EntryDialog(
             initial.fields.forEach { field -> put(field.label, field.value) }
         }
     }
-    var valuesRevealed by remember { mutableStateOf(false) }
+    // Which of the secret boxes of this kind of record is being read, by their label.
+    val revealedTyped = remember { mutableStateMapOf<String, Boolean>() }
 
     // Recomputed while a new category is being typed, which costs nothing: a handful of strings.
     val categoryChoices = remember(categories, category) {
@@ -523,30 +528,23 @@ internal fun EntryDialog(
                 // record is for. Putting them past eight generic fields would mean scrolling to
                 // find the number the record exists to hold.
                 if (typeSpecs.isNotEmpty()) {
-                    HorizontalDivider()
-                    if (typeSpecs.any { it.secret }) {
-                        TextButton(onClick = { valuesRevealed = !valuesRevealed }) {
-                            Text(
-                                stringResource(
-                                    if (valuesRevealed) R.string.hide_password else R.string.show_password
-                                )
-                            )
-                        }
-                    }
                     typeSpecs.forEach { spec ->
                         val label = stringResource(spec.label)
+                        val shown = revealedTyped[label] == true
                         Field(
                             label = label,
                             value = typedValues[label].orEmpty(),
-                            visualTransformation = if (spec.secret && !valuesRevealed) {
-                                PasswordVisualTransformation()
+                            hidden = spec.secret,
+                            revealed = shown,
+                            onToggleReveal = if (spec.secret) {
+                                { revealedTyped[label] = !shown }
                             } else {
-                                VisualTransformation.None
+                                null
                             },
+                            numbersOnly = spec.label in NUMERIC_FIELDS,
                             onValueChange = { typedValues[label] = it },
                         )
                     }
-                    HorizontalDivider()
                 }
 
                 if (R.string.field_username in common) {
@@ -554,25 +552,14 @@ internal fun EntryDialog(
                 }
                 if (R.string.field_password in common) {
                     Field(
-                        label = R.string.field_password,
+                        label = stringResource(R.string.field_password),
                         value = password,
+                        hidden = true,
+                        revealed = passwordVisible,
+                        onToggleReveal = { passwordVisible = !passwordVisible },
                         onValueChange = { password = it },
-                        visualTransformation = if (passwordVisible) {
-                            VisualTransformation.None
-                        } else {
-                            PasswordVisualTransformation()
-                        },
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (password.isNotEmpty()) {
-                            TextButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Text(
-                                    stringResource(
-                                        if (passwordVisible) R.string.hide_password else R.string.show_password
-                                    )
-                                )
-                            }
-                        }
                         TextButton(onClick = { generatorOpen = true }) {
                             Text(stringResource(R.string.generate_password))
                         }
@@ -630,14 +617,12 @@ private fun Field(
     label: Int,
     value: String,
     singleLine: Boolean = true,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
     onValueChange: (String) -> Unit,
 ) {
     Field(
         label = stringResource(label),
         value = value,
         singleLine = singleLine,
-        visualTransformation = visualTransformation,
         onValueChange = onValueChange,
     )
 }
@@ -653,18 +638,70 @@ private fun Field(
     label: String,
     value: String,
     singleLine: Boolean = true,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
+    hidden: Boolean = false,
+    revealed: Boolean = false,
+    onToggleReveal: (() -> Unit)? = null,
+    numbersOnly: Boolean = false,
     onValueChange: (String) -> Unit,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        singleLine = singleLine,
-        visualTransformation = visualTransformation,
-        modifier = Modifier.fillMaxWidth(),
-    )
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = singleLine,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                visualTransformation = if (hidden && !revealed) {
+                    PasswordVisualTransformation()
+                } else {
+                    VisualTransformation.None
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (numbersOnly) {
+                        KeyboardType.Number
+                    } else {
+                        KeyboardType.Text
+                    },
+                ),
+                modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+            )
+            if (onToggleReveal != null) {
+                IconButton(onClick = onToggleReveal) {
+                    Icon(
+                        imageVector = if (revealed) {
+                            Icons.Filled.VisibilityOff
+                        } else {
+                            Icons.Filled.Visibility
+                        },
+                        contentDescription = stringResource(
+                            if (revealed) R.string.hide_password else R.string.show_password
+                        ),
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
 }
+
+/**
+ * The boxes of a card that take digits and nothing else.
+ *
+ * A card number, an expiry, a CVV and a PIN are numbers on plastic; typing a letter into one of
+ * them is a slip, and the keyboard is asked for the right kind before the slip can happen.
+ */
+private val NUMERIC_FIELDS = setOf(
+    R.string.field_card_number,
+    R.string.field_card_expiry,
+    R.string.field_card_cvv,
+    R.string.field_card_pin,
+)
 
 /**
  * Picking what kind of record this is.
