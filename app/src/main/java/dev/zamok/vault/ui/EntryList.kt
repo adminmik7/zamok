@@ -51,6 +51,44 @@ object EntryList {
         EntryTypes.all.filter { type -> entries.any { EntryTypes.normalise(it.type) == type } }
 
     /**
+     * One row of the main screen: a category, how much is in it, and what it is made of.
+     *
+     * [name] is the category as the user typed it, and "" for the records that have none — which
+     * sorts last rather than first, because it is not a category anybody made.
+     */
+    data class CategoryRow(val name: String, val count: Int, val type: String)
+
+    /**
+     * The categories on the main screen, each with its count, in the order they are drawn.
+     *
+     * Alphabetical, so a row never moves because something was added somewhere else — the count
+     * next to it is the only part that changes. A [query] keeps the categories a record was found
+     * in, and the counts then say how much of the category that search reached, rather than the
+     * size of the whole thing, which is what the same screen asked for a moment ago.
+     */
+    fun categoryRows(entries: List<Entry>, query: String = ""): List<CategoryRow> {
+        val needle = query.trim().lowercase()
+        val matched = entries.filter { entry ->
+            needle.isEmpty() || entry.category.trim().lowercase().contains(needle) || entry.matches(needle)
+        }
+        return matched
+            .groupBy { it.category.trim() }
+            .map { (name, group) -> CategoryRow(name, group.size, dominantTypeOf(group)) }
+            .sortedWith(compareBy({ if (it.name.isEmpty()) 1 else 0 }, { it.name.lowercase() }, { it.name }))
+    }
+
+    /**
+     * The kind of record a category is mostly made of.
+     *
+     * The most numerous type in it, and on a tie the one the app lists first, so the icon of a
+     * category does not depend on the order the records happen to be stored in.
+     */
+    private fun dominantTypeOf(group: List<Entry>): String {
+        val counts = group.groupingBy { EntryTypes.normalise(it.type) }.eachCount()
+        return EntryTypes.all.firstOrNull { counts[it] == counts.values.maxOrNull() } ?: EntryTypes.PASSWORD
+    }
+
+    /**
      * The entries to draw, in the order to draw them.
      *
      * [type] and [category] are null for "all of them". A blank [query] matches everything; anything
@@ -61,14 +99,12 @@ object EntryList {
         entries: List<Entry>,
         query: String = "",
         category: String? = null,
-        favoritesOnly: Boolean = false,
         order: SortOrder = SortOrder.TITLE,
         type: String? = null,
     ): List<Entry> {
         val needle = query.trim().lowercase()
         val matched = entries.filter { entry ->
-            (!favoritesOnly || entry.favorite) &&
-                (category == null || entry.category.trim() == category) &&
+            (category == null || entry.category.trim() == category) &&
                 (type == null || EntryTypes.normalise(entry.type) == type) &&
                 (needle.isEmpty() || entry.matches(needle))
         }

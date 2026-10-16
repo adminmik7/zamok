@@ -1,11 +1,11 @@
 package dev.zamok.vault.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.zamok.vault.R
 import dev.zamok.vault.model.EntryField
@@ -41,10 +41,10 @@ internal object EntryTypeUi {
     }
 
     fun icon(id: String): ImageVector = when (EntryTypes.normalise(id)) {
-        EntryTypes.ONE_TIME_CODE -> Icons.Filled.Refresh
-        EntryTypes.CARD -> Icons.Filled.ShoppingCart
-        EntryTypes.NOTE -> Icons.Filled.Create
-        EntryTypes.PASSPORT -> Icons.Filled.Person
+        EntryTypes.ONE_TIME_CODE -> Icons.Filled.Timer
+        EntryTypes.CARD -> Icons.Filled.CreditCard
+        EntryTypes.NOTE -> Icons.Filled.Description
+        EntryTypes.PASSPORT -> Icons.Filled.Badge
         else -> Icons.Filled.Lock
     }
 

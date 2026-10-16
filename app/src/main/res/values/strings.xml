@@ -29,8 +29,6 @@
     <!-- Vault -->
     <string name="empty_vault">Хранилище пустое. Добавьте первую запись.</string>
     <string name="nothing_found">Ничего не найдено.</string>
-    <string name="all_entries">Все записи</string>
-    <string name="favorites">Избранное</string>
     <string name="uncategorized">Без категории</string>
     <string name="search_hint">Поиск</string>
     <string name="sort_by_title">По названию</string>
@@ -43,7 +41,6 @@
 
     <!-- Accessibility labels: read aloud, never drawn. -->
     <string name="cd_menu">Разделы</string>
-    <string name="cd_favorites">Избранное</string>
     <string name="cd_favorite_mark">В избранном</string>
     <string name="cd_clear_search">Очистить поиск</string>
     <string name="cd_sort">Порядок</string>
@@ -99,8 +96,6 @@
     <string name="nav_security">Безопасность</string>
     <string name="nav_tools">Инструменты</string>
     <string name="nav_search">Поиск</string>
-    <string name="all_categories">Все категории</string>
-    <string name="cd_category_filter">Фильтр по категориям</string>
 
     <!-- Unlocking with a fingerprint -->
     <string name="unlock_with_password">Ввести мастер-пароль</string>

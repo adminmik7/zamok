@@ -99,18 +99,6 @@ class EntryListTest {
     // ---- filters ----
 
     @Test
-    fun `the favorites filter keeps only the starred entries`() {
-        val entries = listOf(
-            entry("1", title = "A", favorite = true),
-            entry("2", title = "B"),
-        )
-
-        val shown = EntryList.apply(entries, favoritesOnly = true)
-
-        assertEquals(listOf("1"), shown.map { it.id })
-    }
-
-    @Test
     fun `the category filter keeps only that category`() {
         val entries = listOf(
             entry("1", title = "A", category = "Банк"),
@@ -129,9 +117,91 @@ class EntryListTest {
             entry("3", title = "Chase", category = "Почта", favorite = true),
         )
 
-        val shown = EntryList.apply(entries, query = "chase", category = "Банк", favoritesOnly = true)
+        val shown = EntryList.apply(entries, query = "chase", category = "Банк")
 
-        assertEquals(listOf("1"), shown.map { it.id })
+        assertEquals(listOf("1", "2"), shown.map { it.id })
+    }
+
+    // ---- the categories on the main screen ----
+
+    @Test
+    fun `each category comes with what is in it, in alphabetical order`() {
+        val entries = listOf(
+            entry("1", category = "Почта"),
+            entry("2", category = "Банк"),
+            entry("3", category = "Почта"),
+        )
+
+        val rows = EntryList.categoryRows(entries)
+
+        assertEquals(listOf("Банк", "Почта"), rows.map { it.name })
+        assertEquals(listOf(1, 2), rows.map { it.count })
+    }
+
+    @Test
+    fun `the records without a category are a row of their own, at the end`() {
+        val entries = listOf(
+            entry("1", title = "A"),
+            entry("2", title = "B"),
+            entry("3", category = "Банк"),
+        )
+
+        val rows = EntryList.categoryRows(entries)
+
+        assertEquals(listOf("Банк", ""), rows.map { it.name })
+        assertEquals(2, rows.last().count)
+    }
+
+    @Test
+    fun `a category is drawn with the kind of record it mostly holds`() {
+        val entries = listOf(
+            entry("1", category = "Кошелёк", type = EntryTypes.CARD),
+            entry("2", category = "Кошелёк", type = EntryTypes.CARD),
+            entry("3", category = "Кошелёк", type = EntryTypes.PASSWORD),
+        )
+
+        assertEquals(EntryTypes.CARD, EntryList.categoryRows(entries).single().type)
+    }
+
+    @Test
+    fun `a tie in a category goes to the kind the app lists first`() {
+        val entries = listOf(
+            entry("1", category = "Смешанная", type = EntryTypes.NOTE),
+            entry("2", category = "Смешанная", type = EntryTypes.CARD),
+        )
+
+        assertEquals(EntryTypes.CARD, EntryList.categoryRows(entries).single().type)
+    }
+
+    @Test
+    fun `a search keeps the categories it found something in, counting only that`() {
+        val entries = listOf(
+            entry("1", title = "Gmail", category = "Почта"),
+            entry("2", title = "Yandex", category = "Почта"),
+            entry("3", title = "Тинькофф", category = "Банк"),
+        )
+
+        val rows = EntryList.categoryRows(entries, query = "gmail")
+
+        assertEquals(listOf("Почта"), rows.map { it.name })
+        assertEquals(1, rows.single().count)
+    }
+
+    @Test
+    fun `a search also finds a category by its own name`() {
+        val entries = listOf(
+            entry("1", title = "Gmail", category = "Почта"),
+            entry("2", title = "Тинькофф", category = "Банк"),
+        )
+
+        assertEquals(listOf("Банк"), EntryList.categoryRows(entries, query = "банк").map { it.name })
+    }
+
+    @Test
+    fun `an unknown type in a category is read as an ordinary record`() {
+        val entries = listOf(entry("1", category = "Из будущего", type = "passkey"))
+
+        assertEquals(EntryTypes.PASSWORD, EntryList.categoryRows(entries).single().type)
     }
 
     @Test
