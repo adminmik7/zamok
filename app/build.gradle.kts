@@ -62,6 +62,9 @@ dependencies {
     // Not pulled in by material3, but it is what the BOM pins the icons to, and the screen needs
     // them: no hand-drawn glyphs, and no emoji, whose look changes from phone to phone.
     implementation(libs.androidx.compose.material.icons.core)
+    // The extended set, for the icons the record screen is drawn with: an eye, a pencil and a copy
+    // are all named in the design and none of them is in the small platform set.
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
