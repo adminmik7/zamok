@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,6 +28,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -54,9 +59,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -85,10 +93,19 @@ import kotlin.math.roundToInt
 @Composable
 fun VaultApp(controller: VaultController) {
     val state = controller.state
-    if (state.unlocked) {
-        VaultScreen(controller, state)
-    } else {
-        UnlockScreen(controller, state)
+    // The surface is the app's own background and, with it, the colour everything inside is drawn
+    // in. Without it the screens sit on whatever the window happens to be, and the text takes the
+    // default colour of the platform: black text on this app's dark background.
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+    ) {
+        if (state.unlocked) {
+            VaultScreen(controller, state)
+        } else {
+            UnlockScreen(controller, state)
+        }
     }
 }
 
@@ -112,15 +129,29 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .padding(horizontal = 28.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
     ) {
+        Mark(size = 96.dp)
+        Text(
+            text = stringResource(R.string.app_name),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+        )
         Text(
             text = stringResource(if (creating) R.string.create_title else R.string.unlock_title),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
         if (creating) {
-            Text(stringResource(R.string.create_hint), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = stringResource(R.string.create_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
 
         // A vault with a fingerprint enrolled opens with a finger, and the password sits behind a
@@ -130,6 +161,8 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
         val askForPassword = creating || !biometricsReady || passwordWanted
 
         if (askForPassword) {
+            Spacer(Modifier.height(8.dp))
+
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -141,35 +174,50 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
                 } else {
                     PasswordVisualTransformation()
                 },
+                trailingIcon = {
+                    IconButton(onClick = { visible = !visible }, enabled = !state.busy) {
+                        Icon(
+                            imageVector = if (visible) {
+                                Icons.Filled.VisibilityOff
+                            } else {
+                                Icons.Filled.Visibility
+                            },
+                            contentDescription = stringResource(
+                                if (visible) R.string.hide_password else R.string.show_password
+                            ),
+                        )
+                    }
+                },
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            TextButton(onClick = { visible = !visible }, enabled = !state.busy) {
-                Text(stringResource(if (visible) R.string.hide_password else R.string.show_password))
-            }
-        }
+            ErrorText(state.error)
 
-        ErrorText(state.error)
-
-        if (askForPassword) {
             Button(
                 onClick = {
                     if (creating) controller.create(password) else controller.unlock(password)
                 },
                 enabled = !state.busy && password.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
             ) {
-                Text(stringResource(if (creating) R.string.create_vault else R.string.open_vault))
+                Text(
+                    text = stringResource(if (creating) R.string.create_vault else R.string.open_vault),
+                    style = MaterialTheme.typography.titleMedium,
+                )
             }
+        } else {
+            ErrorText(state.error)
         }
 
         if (biometricsReady) {
-            BiometricUnlockButton(controller, enabled = !state.busy)
             if (askForPassword) {
                 TextButton(onClick = { controller.forgetBiometricUnlock() }, enabled = !state.busy) {
                     Text(stringResource(R.string.biometric_forget))
                 }
             } else {
+                BiometricUnlockButton(controller, enabled = !state.busy)
                 TextButton(onClick = { passwordWanted = true }, enabled = !state.busy) {
                     Text(stringResource(R.string.unlock_with_password))
                 }
@@ -188,6 +236,30 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
         if (state.busy) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         }
+    }
+}
+
+/**
+ * The app's own mark: a padlock in a disc of the accent colour.
+ *
+ * A vector, like every other mark here - no picture, no font that has to be there. It stands for the
+ * one thing this app does, and it is the only decoration on the screen that opens it.
+ */
+@Composable
+private fun Mark(size: Dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.size(size / 2),
+        )
     }
 }
 
