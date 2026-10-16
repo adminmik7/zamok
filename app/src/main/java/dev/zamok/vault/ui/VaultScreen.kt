@@ -367,36 +367,18 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                         )
 
                         VaultTab.VAULT, VaultTab.SEARCH -> {
-                            VaultSearchRow(
+                            EntryListScreen(
+                                entries = state.entries,
                                 query = query,
                                 onQueryChange = { query = it },
                                 order = order,
                                 onOrderChange = { order = it },
                                 favoritesOnly = favoritesOnly,
                                 onFavoritesChange = { favoritesOnly = it },
+                                onEntryClick = { viewingId = it.id },
+                                onAdd = null,
                                 focus = searchFocus,
                             )
-                            when {
-                                state.entries.isEmpty() -> CenteredMessage(R.string.empty_vault)
-                                // Entries exist, so an empty list means a search or a filter hid them.
-                                sections.isEmpty() -> CenteredMessage(R.string.nothing_found)
-                                else -> LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
-                                ) {
-                                    for (section in sections) {
-                                        item(key = "head-${section.type}") {
-                                            SectionHeader(
-                                                label = EntryTypeUi.label(section.type),
-                                                count = section.entries.size,
-                                            )
-                                        }
-                                        items(section.entries, key = { it.id }) { entry ->
-                                            EntryRow(entry, onClick = { viewingId = entry.id })
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -518,6 +500,72 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
 @Composable
 private fun DrawerDivider() {
     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+}
+
+/**
+ * Everything the open vault's list shows: the search row, the empty states and the records
+ * grouped by kind. Nothing here touches an activity, so it can be drawn in a preview. [onAdd] is
+ * the plus button; the shell passes null because the scaffold already has one.
+ */
+@Composable
+internal fun EntryListScreen(
+    entries: List<Entry>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    order: SortOrder,
+    onOrderChange: (SortOrder) -> Unit,
+    favoritesOnly: Boolean,
+    onFavoritesChange: (Boolean) -> Unit,
+    onEntryClick: (Entry) -> Unit,
+    onAdd: (() -> Unit)?,
+    focus: FocusRequester,
+) {
+    val sections = remember(entries, query, favoritesOnly, order) {
+        EntryList.sections(entries = entries, query = query, favoritesOnly = favoritesOnly, order = order)
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        VaultSearchRow(
+            query = query,
+            onQueryChange = onQueryChange,
+            order = order,
+            onOrderChange = onOrderChange,
+            favoritesOnly = favoritesOnly,
+            onFavoritesChange = onFavoritesChange,
+            focus = focus,
+        )
+        when {
+            entries.isEmpty() -> CenteredMessage(R.string.empty_vault)
+            // Entries exist, so an empty list means a search or a filter hid them.
+            sections.isEmpty() -> CenteredMessage(R.string.nothing_found)
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
+            ) {
+                for (section in sections) {
+                    item(key = "head-${section.type}") {
+                        SectionHeader(
+                            label = EntryTypeUi.label(section.type),
+                            count = section.entries.size,
+                        )
+                    }
+                    items(section.entries, key = { it.id }) { entry ->
+                        EntryRow(entry, onClick = { onEntryClick(entry) })
+                    }
+                }
+            }
+        }
+        if (onAdd != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
+                FloatingActionButton(onClick = onAdd) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.add_entry),
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
