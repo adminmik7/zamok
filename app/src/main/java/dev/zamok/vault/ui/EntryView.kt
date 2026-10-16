@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import dev.zamok.vault.R
 import dev.zamok.vault.model.Entry
 import dev.zamok.vault.model.EntryField
+import dev.zamok.vault.model.EntryTypes
 
 /**
  * One record, read at a glance and changed in place.
@@ -79,6 +80,8 @@ internal fun EntryView(
 ) {
     val context = LocalContext.current
     var passwordVisible by remember { mutableStateOf(false) }
+    var cardNumberVisible by remember { mutableStateOf(false) }
+    val isCard = EntryTypes.normalise(entry.type) == EntryTypes.CARD
     var menuOpen by remember { mutableStateOf(false) }
     var editingField by remember { mutableStateOf(-1) }
 
@@ -168,7 +171,15 @@ internal fun EntryView(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                EntryAvatar(entry)
+                if (isCard) {
+                    CardFace(
+                        entry = entry,
+                        numberVisible = cardNumberVisible,
+                        onToggleNumber = { cardNumberVisible = !cardNumberVisible },
+                    )
+                } else {
+                    EntryAvatar(entry)
+                }
                 InlineValue(
                     value = entry.title,
                     placeholder = stringResource(R.string.field_title),
@@ -229,6 +240,12 @@ internal fun EntryView(
 
             HorizontalDivider()
 
+            if (isCard) {
+                CardDetails(
+                    entry = entry,
+                    onChange = { updated -> onChange(updated) },
+                )
+            }
             if (entry.username.isNotEmpty()) {
                 DetailRow(stringResource(R.string.field_username), entry.username)
             }
