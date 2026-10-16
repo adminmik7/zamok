@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
@@ -481,7 +482,7 @@ internal fun EntryDialog(
                             )
                         }
                     }
-                    TextButton(
+                    IconButton(
                         onClick = {
                             onSave(
                                 initial.copy(
@@ -503,7 +504,12 @@ internal fun EntryDialog(
                                 )
                             )
                         },
-                    ) { Text(stringResource(R.string.save)) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = stringResource(R.string.save),
+                        )
+                    }
                 }
                 HorizontalDivider()
                 Column(
