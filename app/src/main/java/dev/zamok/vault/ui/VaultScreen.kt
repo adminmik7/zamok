@@ -885,7 +885,7 @@ private fun EntryRow(entry: Entry, onClick: () -> Unit) {
  * The colour is worked out from the title, so the same record looks the same on every device.
  */
 @Composable
-private fun EntryAvatar(entry: Entry) {
+internal fun EntryAvatar(entry: Entry) {
     Box(
         modifier = Modifier
             .size(44.dp)

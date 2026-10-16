@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,6 +68,7 @@ import dev.zamok.vault.model.EntryField
  * A field that is not shown is not erased: the value stays in the entry and comes back if the
  * record is edited there.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EntryView(
     entry: Entry,
