@@ -9,34 +9,50 @@
 
 | Компонент | Версия |
 |---|---|
-| Gradle | 8.13 |
-| Android Gradle Plugin | 8.13.2 |
+| Gradle | 9.6.0 |
+| Android Gradle Plugin | 9.4.1 |
 | Kotlin | 2.3.21 |
 | Compose BOM | 2026.04.01 |
 | compileSdk / targetSdk | 36 |
 | minSdk | 26 (Android 8.0) |
 | JDK | 17 |
 
-Почему не AGP 9.x: он заменил классический DSL блока `android {}`, а Compose 1.12 требует
-`compileSdk 37` и AGP ≥ 9.1.1. Пока нет локального окружения для проверки сборки — держимся
-стабильного, хорошо документированного набора.
+AGP 9.x заменил классический DSL блока `android {}` на новый. Проект пока остаётся на классическом:
+сборку возвращают `android.newDsl=false` и ещё несколько переключателей совместимости в
+`gradle.properties`. Сам AGP помечает их как deprecated и убирает в 10.0 — переезд на новый DSL
+отложен, а не сделан.
 
 ## Сборка
 
-Локально окружения нет (нет JDK, Android SDK и Android Studio), поэтому сборка идёт в CI.
+Сборка идёт в CI (`.github/workflows/android.yml`) и локально.
+
+CI:
 
 1. Запушить репозиторий на GitHub.
 2. Workflow `.github/workflows/android.yml` соберёт debug APK.
 3. Готовый файл забирается из Artifacts последнего прогона.
 
-Чтобы собирать локально: поставить JDK 17, затем сгенерировать обёртку Gradle:
+Локально всё окружение лежит в `.toolchain/` внутри проекта и в git не попадает; `build.cmd`
+подхватывает его сам, системный JDK и правка `PATH` не нужны:
 
 ```
-gradle wrapper
-./gradlew assembleDebug
+build.cmd clean
+build.cmd :app:assembleDebug
+build.cmd :app:testDebugUnitTest
 ```
 
-`gradle-wrapper.jar` в репозиторий не закоммичен сознательно — его создаёт команда `gradle wrapper`.
+APK оказывается в `app\build\outputs\apk\debug\app-debug.apk`. В `.toolchain/`: JDK 17 (Temurin),
+Android SDK (`platforms;android-36`, `build-tools;36.0.0`) и домашний каталог Gradle с
+дистрибутивом 9.6.0 и кэшем зависимостей. `local.properties` указывает на этот SDK, `build.cmd`
+ставит `JAVA_HOME` и `GRADLE_USER_HOME` и зовёт `gradlew.bat`.
+
+Подписи у каналов разные: CI подписывает APK ключом `debug.keystore` в корне репозитория (workflow
+создаёт его при первом прогоне и держит в кэше), локальная сборка — ключом из
+`%USERPROFILE%\.android\debug.keystore`. APK одного канала не встанет поверх другого: приложение
+придётся удалить, а с выключенным бэкапом это уносит и хранилище. Перед сменой канала — «Сохранить
+копию» или экспорт CSV.
+
+Обёртка (`gradlew`, `gradle-wrapper.jar`, Gradle 9.6.0) закоммичена — генерировать её отдельно не нужно.
 
 ## Roadmap
 

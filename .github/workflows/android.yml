@@ -32,7 +32,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.13'
+          gradle-version: '9.6.0'
 
       # The debug keystore is created on first use, and a runner starts clean every time: without
       # this cache every run signed the APK with a brand new key, so installing it over the

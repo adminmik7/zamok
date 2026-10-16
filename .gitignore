@@ -1,7 +1,9 @@
 # Gradle / Android
 .gradle/
+.toolchain/
 build/
 local.properties
+build-local.log
 captures/
 .externalNativeBuild/
 .cxx/
