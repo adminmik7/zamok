@@ -197,9 +197,14 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     }
 
     // Back from the list leaves the app, and a password manager is an app someone walks away from in
-    // the middle of something - so it asks. On the other tabs back does what the tab does.
-    BackHandler(enabled = tab != VaultTab.SECURITY && tab != VaultTab.TOOLS) {
-        exitAsk = true
+    // the middle of something - so it asks. From the other tabs it comes back to the list first,
+    // since that is the screen the app is about and the tabs were only a detour from it.
+    BackHandler {
+        if (tab == VaultTab.SECURITY || tab == VaultTab.TOOLS) {
+            tab = VaultTab.VAULT
+        } else {
+            exitAsk = true
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
