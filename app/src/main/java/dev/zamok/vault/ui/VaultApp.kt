@@ -655,7 +655,11 @@ private fun Field(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = singleLine,
-                textStyle = MaterialTheme.typography.bodyLarge,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    // A plain text field takes the colour of the platform, not of the app, so the
+                    // value would be typed in black on this app's dark background.
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 visualTransformation = if (hidden && !revealed) {
                     PasswordVisualTransformation()
