@@ -131,7 +131,10 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     val cancelLabel = stringResource(R.string.cancel)
 
     var tab by remember { mutableStateOf(VaultTab.VAULT) }
-    var editing by remember { mutableStateOf<Entry?>(null) }
+    // Records are held by id, not by value: every keystroke on the viewing screen changes the
+    // entry, and the one to draw is whichever entry the vault now holds under that id.
+    var viewingId by remember { mutableStateOf<String?>(null) }
+    var editingId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
     var newType by remember { mutableStateOf(EntryTypes.PASSWORD) }
     var typeMenuOpen by remember { mutableStateOf(false) }
@@ -338,7 +341,7 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                             entries = state.entries,
                             onOpenEntry = { entry ->
                                 tab = VaultTab.VAULT
-                                editing = entry
+                                viewingId = entry.id
                             },
                             modifier = Modifier.padding(16.dp),
                         )
@@ -389,7 +392,7 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                                             )
                                         }
                                         items(section.entries, key = { it.id }) { entry ->
-                                            EntryRow(entry, onClick = { editing = entry })
+                                            EntryRow(entry, onClick = { viewingId = entry.id })
                                         }
                                     }
                                 }
@@ -437,13 +440,36 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
         )
     }
 
-    editing?.let { entry ->
+    val viewing = viewingId?.let { id -> state.entries.firstOrNull { it.id == id } }
+    val fullEditing = editingId?.let { id -> state.entries.firstOrNull { it.id == id } }
+
+    viewing?.let { entry ->
+        EntryView(
+            entry = entry,
+            onChange = { controller.update(it) },
+            onEdit = { editingId = entry.id },
+            onDelete = {
+                controller.delete(entry.id)
+                viewingId = null
+            },
+            onBack = { viewingId = null },
+        )
+    }
+
+    fullEditing?.let { entry ->
         EntryDialog(
             initial = entry,
             categories = categories,
-            onDismiss = { editing = null },
-            onSave = { controller.update(it); editing = null },
-            onDelete = { controller.delete(entry.id); editing = null },
+            onDismiss = { editingId = null },
+            onSave = {
+                controller.update(it)
+                editingId = null
+            },
+            onDelete = {
+                controller.delete(entry.id)
+                editingId = null
+                viewingId = null
+            },
         )
     }
 
@@ -950,7 +976,7 @@ private fun TotpCode(secretText: String) {
 }
 
 /** Copies [text] for pasting. A one-time code expires in seconds, so it does not linger. */
-private fun Context.copyToClipboard(text: String) {
+internal fun Context.copyToClipboard(text: String) {
     getSystemService(ClipboardManager::class.java)
         ?.setPrimaryClip(ClipData.newPlainText("Zamok", text))
 }
