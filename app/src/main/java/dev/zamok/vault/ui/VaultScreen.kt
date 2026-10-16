@@ -13,7 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,10 +34,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -129,7 +129,6 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     val cancelLabel = stringResource(R.string.cancel)
 
     var tab by remember { mutableStateOf(VaultTab.VAULT) }
-    var typeTab by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Entry?>(null) }
     var adding by remember { mutableStateOf(false) }
     var newType by remember { mutableStateOf(EntryTypes.PASSWORD) }
@@ -138,8 +137,8 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     var csvExportOpen by remember { mutableStateOf(false) }
 
     var query by remember { mutableStateOf("") }
-    var openedCategory by remember { mutableStateOf<String?>(null) }
-    var insideCategory by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var favoritesOnly by remember { mutableStateOf(false) }
     var order by remember { mutableStateOf(SortOrder.TITLE) }
 
     val searchFocus = remember { FocusRequester() }
@@ -177,33 +176,16 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     }
 
     val categories = remember(state.entries) { EntryList.categoriesOf(state.entries) }
-    val types = remember(state.entries) { EntryList.typesPresent(state.entries) }
-    val categoryRows = remember(state.entries, query) { EntryList.categoryRows(state.entries, query) }
-    val shown = remember(state.entries, query, openedCategory, order, typeTab) {
-        EntryList.apply(
+    val sections = remember(state.entries, query, selectedCategory, favoritesOnly, order) {
+        EntryList.sections(
             entries = state.entries,
             query = query,
-            category = if (insideCategory) openedCategory else null,
+            category = selectedCategory,
+            favoritesOnly = favoritesOnly,
             order = order,
-            type = if (insideCategory) typeTab else null,
         )
     }
-
-    // The query belongs to whatever is on screen: searching in a category and going back to the
-    // categories must not leave a filter behind that nobody is looking at any more.
-    fun openCategory(name: String) {
-        openedCategory = name
-        insideCategory = true
-        query = ""
-        typeTab = null
-    }
-
-    fun closeCategory() {
-        insideCategory = false
-        openedCategory = null
-        query = ""
-        typeTab = null
-    }
+    val shownCount = remember(sections) { sections.sumOf { it.entries.size } }
 
     // Closing after a choice, since the drawer covers the result: leaving it open would look like
     // the screen is still busy. A new entry keeps it open — that is a list of things to add,
@@ -223,6 +205,17 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.all_entries)) },
+                        selected = !favoritesOnly,
+                        onClick = { choose { favoritesOnly = false } },
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.favorites)) },
+                        selected = favoritesOnly,
+                        onClick = { choose { favoritesOnly = true } },
+                    )
+                    DrawerDivider()
                     NavigationDrawerItem(
                         label = { Text(stringResource(R.string.audit_title)) },
                         selected = tab == VaultTab.SECURITY,
@@ -261,35 +254,27 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                 topBar = {
                     TopAppBar(
                         navigationIcon = {
-                            IconButton(
-                                onClick = {
-                                    if (insideCategory) closeCategory() else scope.launch { drawerState.open() }
-                                },
-                            ) {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                 Icon(
-                                    imageVector = if (insideCategory) Icons.Filled.ArrowBack else Icons.Filled.Menu,
-                                    contentDescription = stringResource(
-                                        if (insideCategory) R.string.back else R.string.cd_menu,
-                                    ),
+                                    imageVector = Icons.Filled.Menu,
+                                    contentDescription = stringResource(R.string.cd_menu),
                                 )
                             }
                         },
                         title = {
                             Column {
                                 Text(
-                                    if (insideCategory) {
-                                        openedCategory.orEmpty().ifBlank { stringResource(R.string.uncategorized) }
-                                    } else {
-                                        stringResource(R.string.nav_vault)
-                                    }
+                                    stringResource(
+                                        if (favoritesOnly) R.string.favorites else R.string.all_entries
+                                    )
                                 )
                                 Text(
                                     // The count is of what is on screen, so a search says how much
                                     // it found rather than how much was hidden.
                                     text = pluralStringResource(
                                         R.plurals.entries_count,
-                                        if (insideCategory) shown.size else categoryRows.size,
-                                        if (insideCategory) shown.size else categoryRows.size,
+                                        shownCount,
+                                        shownCount,
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -365,36 +350,33 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                             VaultSearchRow(
                                 query = query,
                                 onQueryChange = { query = it },
-                                order = order.takeIf { insideCategory },
+                                order = order,
                                 onOrderChange = { order = it },
+                                favoritesOnly = favoritesOnly,
+                                onFavoritesChange = { favoritesOnly = it },
+                                categories = categories,
+                                category = selectedCategory,
+                                onCategoryChange = { selectedCategory = it },
                                 focus = searchFocus,
                             )
                             when {
                                 state.entries.isEmpty() -> CenteredMessage(R.string.empty_vault)
-                                insideCategory -> {
-                                    TypeTabs(
-                                        types = types,
-                                        selected = typeTab,
-                                        onSelect = { typeTab = it },
-                                    )
-                                    if (shown.isEmpty()) {
-                                        CenteredMessage(R.string.nothing_found)
-                                    } else {
-                                        EntryListColumn(entries = shown, onOpen = { editing = it })
-                                    }
-                                }
-                                // Records without a category are one row of their own, at the end:
-                                // the records in them exist, and hiding them would be a lie.
-                                categoryRows.isEmpty() -> CenteredMessage(R.string.nothing_found)
+                                // Entries exist, so an empty list means a search or a filter hid them.
+                                sections.isEmpty() -> CenteredMessage(R.string.nothing_found)
                                 else -> LazyColumn(
                                     modifier = Modifier.fillMaxSize(),
                                     contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
                                 ) {
-                                    items(categoryRows, key = { it.name }) { row ->
-                                        CategoryRowView(
-                                            row = row,
-                                            onClick = { openCategory(row.name) },
-                                        )
+                                    for (section in sections) {
+                                        item(key = "head-${section.type}") {
+                                            SectionHeader(
+                                                label = EntryTypeUi.label(section.type),
+                                                count = section.entries.size,
+                                            )
+                                        }
+                                        items(section.entries, key = { it.id }) { entry ->
+                                            EntryRow(entry, onClick = { editing = entry })
+                                        }
                                     }
                                 }
                             }
@@ -432,7 +414,7 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
             initial = Entry(
                 id = "",
                 type = newType,
-                category = if (insideCategory) openedCategory.orEmpty() else "",
+                category = selectedCategory.orEmpty(),
             ),
             categories = categories,
             onDismiss = { adding = false },
@@ -535,12 +517,17 @@ private fun enableBiometric(
 private fun VaultSearchRow(
     query: String,
     onQueryChange: (String) -> Unit,
-    order: SortOrder?,
+    order: SortOrder,
     onOrderChange: (SortOrder) -> Unit,
+    favoritesOnly: Boolean,
+    onFavoritesChange: (Boolean) -> Unit,
+    categories: List<String>,
+    category: String?,
+    onCategoryChange: (String?) -> Unit,
     focus: FocusRequester,
 ) {
     var sortOpen by remember { mutableStateOf(false) }
-    
+    var filterOpen by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -562,32 +549,28 @@ private fun VaultSearchRow(
                             )
                         }
                     }
-                    // Sorting is what the record list below is made of; the list of categories is
-                    // always alphabetical, so there is nothing for it to choose.
-                    if (order != null) {
-                        Box {
-                            IconButton(onClick = { sortOpen = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = stringResource(R.string.cd_sort),
-                                )
-                            }
-                            DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.sort_by_title)) },
-                                    onClick = {
-                                        sortOpen = false
-                                        onOrderChange(SortOrder.TITLE)
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.sort_by_recent)) },
-                                    onClick = {
-                                        sortOpen = false
-                                        onOrderChange(SortOrder.RECENT)
-                                    },
-                                )
-                            }
+                    Box {
+                        IconButton(onClick = { sortOpen = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = stringResource(R.string.cd_sort),
+                            )
+                        }
+                        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sort_by_title)) },
+                                onClick = {
+                                    sortOpen = false
+                                    onOrderChange(SortOrder.TITLE)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sort_by_recent)) },
+                                onClick = {
+                                    sortOpen = false
+                                    onOrderChange(SortOrder.RECENT)
+                                },
+                            )
                         }
                     }
                 }
@@ -595,113 +578,81 @@ private fun VaultSearchRow(
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.weight(1f).focusRequester(focus),
         )
-    }
-}
 
-@Composable
-private fun EntryListColumn(entries: List<Entry>, onOpen: (Entry) -> Unit) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
-    ) {
-        items(entries, key = { it.id }) { entry ->
-            EntryRow(entry, onClick = { onOpen(entry) })
+        IconButton(onClick = { onFavoritesChange(!favoritesOnly) }) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = stringResource(R.string.cd_favorites),
+                tint = if (favoritesOnly) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+
+        Box {
+            IconButton(onClick = { filterOpen = true }) {
+                Icon(
+                    // Three lines rather than a funnel: the platform icon set has no funnel, and
+                    // this is the nearest thing in it.
+                    imageVector = Icons.Filled.List,
+                    contentDescription = stringResource(R.string.cd_category_filter),
+                    tint = if (category != null) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.all_categories)) },
+                    onClick = {
+                        onCategoryChange(null)
+                        filterOpen = false
+                    },
+                )
+                for (option in categories) {
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onCategoryChange(option)
+                            filterOpen = false
+                        },
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * One category on the main screen: what it is called, what is in it, and the icon of the kind of
- * record it turned out to be made of.
+ * The heading over one kind of record: what it is, and how much of it there is.
+ *
+ * The count is of what is on screen, so a search says how much it found under that kind rather than
+ * how much the vault holds in total.
  */
 @Composable
-private fun CategoryRowView(row: EntryList.CategoryRow, onClick: () -> Unit) {
-    val name = row.name.ifBlank { stringResource(R.string.uncategorized) }
+private fun SectionHeader(label: Int, count: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircleIcon(
-            icon = EntryTypeUi.icon(row.type),
-            color = EntryList.colorFor(row.name),
-            contentDescription = name,
-        )
-        Column(
-            modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
         Text(
-            text = row.count.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/**
- * The record types that exist, as tabs above the list.
- *
- * One tab per type in use rather than one per type the app knows: a tab with nothing under it is a
- * tab that makes the vault look emptier than it is. "Все" is always there — it is not a type.
- */
-@Composable
-private fun TypeTabs(types: List<String>, selected: String?, onSelect: (String?) -> Unit) {
-    Column {
-        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            TypeTab(
-                label = stringResource(R.string.tab_all),
-                selected = selected == null,
-                onClick = { onSelect(null) },
-            )
-            for (type in types) {
-                TypeTab(
-                    label = stringResource(EntryTypeUi.label(type)),
-                    selected = selected == type,
-                    onClick = { onSelect(type) },
-                )
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    }
-}
-
-@Composable
-private fun TypeTab(label: String, selected: Boolean, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = label,
+            text = stringResource(label),
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
             maxLines = 1,
         )
-        // An underline as wide as the tab, and only under the chosen one: quieter above a busy list
-        // than a filled pill, and this is how the screen it is modelled on marks the choice.
-        Box(
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .fillMaxWidth()
-                .height(3.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(
-                    if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
-                ),
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -911,26 +862,16 @@ private fun EntryRow(entry: Entry, onClick: () -> Unit) {
  */
 @Composable
 private fun EntryAvatar(entry: Entry) {
-    CircleIcon(
-        icon = EntryTypeUi.icon(entry.type),
-        color = EntryList.avatarColorOf(entry),
-        contentDescription = stringResource(EntryTypeUi.label(entry.type)),
-    )
-}
-
-/** The same circle for a category, which has a kind of record but no title to hash. */
-@Composable
-private fun CircleIcon(icon: ImageVector, color: Long, contentDescription: String) {
     Box(
         modifier = Modifier
             .size(44.dp)
             .clip(CircleShape)
-            .background(Color(color)),
+            .background(Color(EntryList.avatarColorOf(entry))),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
+            imageVector = EntryTypeUi.icon(entry.type),
+            contentDescription = stringResource(EntryTypeUi.label(entry.type)),
             tint = Color.White,
             modifier = Modifier.size(22.dp),
         )

@@ -41,51 +41,26 @@ object EntryList {
     fun categoriesOf(entries: List<Entry>): List<String> =
         entries.map { it.category.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
 
-    /**
-     * The tabs above the list: the record types that actually occur, in the app's own order.
-     *
-     * Only the ones in use — a tab with nothing under it is a tab that teaches the user their vault
-     * is emptier than it is. "All" is not in here; the screen adds it, and it is always there.
-     */
-    fun typesPresent(entries: List<Entry>): List<String> =
-        EntryTypes.all.filter { type -> entries.any { EntryTypes.normalise(it.type) == type } }
+    /** One kind of record and everything of that kind the filters let through. */
+    data class Section(val type: String, val entries: List<Entry>)
 
     /**
-     * One row of the main screen: a category, how much is in it, and what it is made of.
+     * The list screen, in the shape it is drawn in: the records grouped by what kind they are.
      *
-     * [name] is the category as the user typed it, and "" for the records that have none — which
-     * sorts last rather than first, because it is not a category anybody made.
+     * The groups come in the app's own order rather than the order they happen to be stored in, and
+     * an empty one is left out entirely: a heading over nothing teaches the user their vault is
+     * emptier than it is. The order inside a group is the same [apply] gives, which is what the sort
+     * menu in the bar changes.
      */
-    data class CategoryRow(val name: String, val count: Int, val type: String)
-
-    /**
-     * The categories on the main screen, each with its count, in the order they are drawn.
-     *
-     * Alphabetical, so a row never moves because something was added somewhere else — the count
-     * next to it is the only part that changes. A [query] keeps the categories a record was found
-     * in, and the counts then say how much of the category that search reached, rather than the
-     * size of the whole thing, which is what the same screen asked for a moment ago.
-     */
-    fun categoryRows(entries: List<Entry>, query: String = ""): List<CategoryRow> {
-        val needle = query.trim().lowercase()
-        val matched = entries.filter { entry ->
-            needle.isEmpty() || entry.category.trim().lowercase().contains(needle) || entry.matches(needle)
-        }
-        return matched
-            .groupBy { it.category.trim() }
-            .map { (name, group) -> CategoryRow(name, group.size, dominantTypeOf(group)) }
-            .sortedWith(compareBy({ if (it.name.isEmpty()) 1 else 0 }, { it.name.lowercase() }, { it.name }))
-    }
-
-    /**
-     * The kind of record a category is mostly made of.
-     *
-     * The most numerous type in it, and on a tie the one the app lists first, so the icon of a
-     * category does not depend on the order the records happen to be stored in.
-     */
-    private fun dominantTypeOf(group: List<Entry>): String {
-        val counts = group.groupingBy { EntryTypes.normalise(it.type) }.eachCount()
-        return EntryTypes.all.firstOrNull { counts[it] == counts.values.maxOrNull() } ?: EntryTypes.PASSWORD
+    fun sections(
+        entries: List<Entry>,
+        query: String = "",
+        category: String? = null,
+        favoritesOnly: Boolean = false,
+        order: SortOrder = SortOrder.TITLE,
+    ): List<Section> = EntryTypes.all.mapNotNull { type ->
+        val inType = apply(entries, query, category, favoritesOnly, order, type)
+        if (inType.isEmpty()) null else Section(type, inType)
     }
 
     /**
@@ -99,12 +74,14 @@ object EntryList {
         entries: List<Entry>,
         query: String = "",
         category: String? = null,
+        favoritesOnly: Boolean = false,
         order: SortOrder = SortOrder.TITLE,
         type: String? = null,
     ): List<Entry> {
         val needle = query.trim().lowercase()
         val matched = entries.filter { entry ->
-            (category == null || entry.category.trim() == category) &&
+            (!favoritesOnly || entry.favorite) &&
+                (category == null || entry.category.trim() == category) &&
                 (type == null || EntryTypes.normalise(entry.type) == type) &&
                 (needle.isEmpty() || entry.matches(needle))
         }

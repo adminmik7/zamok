@@ -62,9 +62,6 @@ dependencies {
     // Not pulled in by material3, but it is what the BOM pins the icons to, and the screen needs
     // them: no hand-drawn glyphs, and no emoji, whose look changes from phone to phone.
     implementation(libs.androidx.compose.material.icons.core)
-    // The extended set, for the icons the categories are drawn with: a bank and a credit card say
-    // what a category holds in a way that neither a lock nor a shopping cart does.
-    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
