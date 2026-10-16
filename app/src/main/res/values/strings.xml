@@ -5,7 +5,6 @@
     <!-- Unlock -->
     <string name="create_title">Придумайте мастер-пароль</string>
     <string name="create_hint">Он шифрует хранилище. Забыли — восстановить нельзя: в файле нет ничего, чем можно было бы его открыть.</string>
-    <string name="unlock_title">Введите мастер-пароль</string>
     <string name="master_password">Мастер-пароль</string>
     <string name="create_vault">Создать хранилище</string>
     <string name="open_vault">Открыть</string>

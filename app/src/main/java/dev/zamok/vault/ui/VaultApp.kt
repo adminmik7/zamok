@@ -41,6 +41,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -139,13 +140,13 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
-        Text(
-            text = stringResource(if (creating) R.string.create_title else R.string.unlock_title),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
         if (creating) {
+            Text(
+                text = stringResource(R.string.create_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
             Text(
                 text = stringResource(R.string.create_hint),
                 style = MaterialTheme.typography.bodyMedium,
@@ -218,8 +219,16 @@ private fun UnlockScreen(controller: VaultController, state: VaultUiState) {
                 }
             } else {
                 BiometricUnlockButton(controller, enabled = !state.busy)
-                TextButton(onClick = { passwordWanted = true }, enabled = !state.busy) {
-                    Text(stringResource(R.string.unlock_with_password))
+                OutlinedButton(
+                    onClick = { passwordWanted = true },
+                    enabled = !state.busy,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.unlock_with_password),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                 }
             }
         } else if (!creating && controller.biometricSupported) {
@@ -281,9 +290,13 @@ private fun BiometricUnlockButton(controller: VaultController, enabled: Boolean)
             }
         },
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().height(52.dp),
     ) {
-        Text(stringResource(R.string.biometric_unlock))
+        Text(
+            text = stringResource(R.string.biometric_unlock),
+            style = MaterialTheme.typography.titleMedium,
+        )
     }
 }
 
