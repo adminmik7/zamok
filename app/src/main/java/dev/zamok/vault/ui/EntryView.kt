@@ -159,38 +159,49 @@ internal fun EntryView(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(
-                        width = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(16.dp),
-                    )
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (isCard) {
-                    CardFace(
-                        entry = entry,
-                        numberVisible = cardNumberVisible,
-                        onToggleNumber = { cardNumberVisible = !cardNumberVisible },
-                        onChange = { updated -> onChange(updated) },
-                    )
-                } else {
-                    EntryAvatar(entry)
-                    InlineValue(
-                        value = entry.title,
-                        placeholder = stringResource(R.string.field_title),
-                        editing = editingField == TITLE,
-                        onStartEditing = { editingField = TITLE },
-                        onStopEditing = { editingField = -1 },
-                        onCommit = { typed -> change { it.copy(title = typed) } },
-                        style = MaterialTheme.typography.headlineSmall,
-                        weight = FontWeight.Bold,
-                    )
-                }
+            // A card stands on its own: it is a picture of a card, and a frame drawn around it
+            // would be a second card inside the first one. Everything else keeps the frame.
+            if (isCard) {
+                CardFace(
+                    entry = entry,
+                    numberVisible = cardNumberVisible,
+                    onToggleNumber = { cardNumberVisible = !cardNumberVisible },
+                    onChange = { updated -> onChange(updated) },
+                )
+                InlineValue(
+                    value = entry.title,
+                    placeholder = stringResource(R.string.field_title),
+                    editing = editingField == TITLE,
+                    onStartEditing = { editingField = TITLE },
+                    onStopEditing = { editingField = -1 },
+                    onCommit = { typed -> change { it.copy(title = typed) } },
+                    style = MaterialTheme.typography.headlineSmall,
+                    weight = FontWeight.Bold,
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            width = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                EntryAvatar(entry)
+                InlineValue(
+                    value = entry.title,
+                    placeholder = stringResource(R.string.field_title),
+                    editing = editingField == TITLE,
+                    onStartEditing = { editingField = TITLE },
+                    onStopEditing = { editingField = -1 },
+                    onCommit = { typed -> change { it.copy(title = typed) } },
+                    style = MaterialTheme.typography.headlineSmall,
+                    weight = FontWeight.Bold,
+                )
                 if (entry.username.isNotEmpty()) {
                     InlineValue(
                         value = entry.username,
@@ -229,6 +240,7 @@ internal fun EntryView(
                             }
                         },
                     )
+                }
                 }
             }
 

@@ -222,14 +222,33 @@ internal fun CardFace(
 private val CARD_GRADIENT = listOf(Color(0xFF2B5CB8), Color(0xFF6C8FE0))
 
 /**
- * The two fields of a card that are not printed on it: the CVV and the PIN.
+ * What the card says, written out under it.
  *
- * The number, the holder and the expiry are on the card above and are not repeated here - the same
- * value said twice on one screen is read twice and has to be kept straight, which is exactly what
- * a screen like this should not ask of a person.
+ * The card above is a picture of the thing; this is where the fields are. Both are here because the
+ * picture is only good for recognising a card with, and a number on a photograph is not something to
+ * type from. Each field is hidden until it is asked for and typed into where it is shown.
  */
 @Composable
 internal fun CardDetails(entry: Entry, onChange: (Entry) -> Unit) {
+    CardField(
+        entry = entry,
+        label = R.string.field_card_number,
+        secret = true,
+        format = { groupCardNumber(it) },
+    ) { value ->
+        onChange(entry.withField(R.string.field_card_number, value))
+    }
+    CardField(entry = entry, label = R.string.field_card_holder, secret = false) { value ->
+        onChange(entry.withField(R.string.field_card_holder, value))
+    }
+    CardField(
+        entry = entry,
+        label = R.string.field_card_expiry,
+        secret = false,
+        format = { formatExpiry(it) },
+    ) { value ->
+        onChange(entry.withField(R.string.field_card_expiry, value))
+    }
     CardField(entry = entry, label = R.string.field_card_cvv, secret = true) { value ->
         onChange(entry.withField(R.string.field_card_cvv, value))
     }
