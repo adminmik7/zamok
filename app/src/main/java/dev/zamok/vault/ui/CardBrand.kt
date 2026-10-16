@@ -29,16 +29,18 @@ enum class CardBrand(val label: String, val lengths: IntRange, val groupSize: In
  */
 fun brandOf(number: String): CardBrand {
     val digits = number.filter { it.isDigit() }
+    if (digits.isEmpty()) return CardBrand.UNKNOWN
+    val two = digits.take(2)
+    val four = digits.take(4).toIntOrNull()
     return when {
-        digits.isEmpty() -> CardBrand.UNKNOWN
         digits.startsWith("4") -> CardBrand.VISA
-        digits.length in 2..3 && digits.take(2).toInt() in 51..55 -> CardBrand.MASTERCARD
-        digits.length in 4..6 && digits.take(4).toIntOrNull() in 2221..2720 -> CardBrand.MASTERCARD
-        digits.length in 4..6 && digits.take(4).toIntOrNull() in 2200..2204 -> CardBrand.MIR
-        digits.length in 2..3 && digits.take(2) in listOf("34", "37") -> CardBrand.AMEX
-        digits.length in 2..3 && digits.startsWith("35") -> CardBrand.JCB
-        digits.length >= 4 && (digits.startsWith("6011") || digits.take(2) in listOf("65", "64")) -> CardBrand.DISCOVER
-        digits.length >= 2 && digits.startsWith("62") -> CardBrand.UNION_PAY
+        two.toIntOrNull() in 51..55 -> CardBrand.MASTERCARD
+        four != null && four in 2200..2204 -> CardBrand.MIR
+        four != null && four in 2221..2720 -> CardBrand.MASTERCARD
+        two == "34" || two == "37" -> CardBrand.AMEX
+        digits.startsWith("35") -> CardBrand.JCB
+        digits.startsWith("6011") || two == "65" || two == "64" -> CardBrand.DISCOVER
+        digits.startsWith("62") -> CardBrand.UNION_PAY
         else -> CardBrand.UNKNOWN
     }
 }

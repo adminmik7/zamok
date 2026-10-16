@@ -30,14 +30,19 @@ class CardBrandTest {
     @Test
     fun `a number too short to be told apart is not guessed at`() {
         assertEquals(CardBrand.UNKNOWN, brandOf(""))
-        assertEquals(CardBrand.UNKNOWN, brandOf("4"))
+        assertEquals(CardBrand.UNKNOWN, brandOf("9"))
         assertEquals(CardBrand.UNKNOWN, brandOf("9999 9999 9999 9999"))
     }
 
     @Test
+    fun `one digit is enough where it settles it`() {
+        assertEquals(CardBrand.VISA, brandOf("4"))
+    }
+
+    @Test
     fun `the checksum catches a mistyped digit`() {
-        assertTrue(passesLuhn("4276380012345678"))
-        assertFalse(passesLuhn("4276380012345679"))
+        assertTrue(passesLuhn("4111111111111111"))
+        assertFalse(passesLuhn("4111111111111112"))
     }
 
     @Test
@@ -63,7 +68,7 @@ class CardBrandTest {
 
     @Test
     fun `an expiry is shortened to its two pairs as it is typed`() {
-        assertEquals("09", formatExpiry("0"))
+        assertEquals("0", formatExpiry("0"))
         assertEquals("09", formatExpiry("09"))
         assertEquals("09/2", formatExpiry("092"))
         assertEquals("09/28", formatExpiry("0928"))
