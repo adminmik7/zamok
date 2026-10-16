@@ -99,8 +99,6 @@
     <string name="nav_security">Безопасность</string>
     <string name="nav_tools">Инструменты</string>
     <string name="nav_search">Поиск</string>
-    <string name="all_categories">Все категории</string>
-    <string name="cd_category_filter">Фильтр по категориям</string>
 
     <!-- Unlocking with a fingerprint -->
     <string name="unlock_with_password">Ввести мастер-пароль</string>

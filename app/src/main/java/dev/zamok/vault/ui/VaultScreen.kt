@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -137,7 +136,6 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     var csvExportOpen by remember { mutableStateOf(false) }
 
     var query by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
     var favoritesOnly by remember { mutableStateOf(false) }
     var order by remember { mutableStateOf(SortOrder.TITLE) }
 
@@ -176,11 +174,10 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
     }
 
     val categories = remember(state.entries) { EntryList.categoriesOf(state.entries) }
-    val sections = remember(state.entries, query, selectedCategory, favoritesOnly, order) {
+    val sections = remember(state.entries, query, favoritesOnly, order) {
         EntryList.sections(
             entries = state.entries,
             query = query,
-            category = selectedCategory,
             favoritesOnly = favoritesOnly,
             order = order,
         )
@@ -354,9 +351,6 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
                                 onOrderChange = { order = it },
                                 favoritesOnly = favoritesOnly,
                                 onFavoritesChange = { favoritesOnly = it },
-                                categories = categories,
-                                category = selectedCategory,
-                                onCategoryChange = { selectedCategory = it },
                                 focus = searchFocus,
                             )
                             when {
@@ -414,7 +408,7 @@ internal fun VaultScreen(controller: VaultController, state: VaultUiState) {
             initial = Entry(
                 id = "",
                 type = newType,
-                category = selectedCategory.orEmpty(),
+                category = "",
             ),
             categories = categories,
             onDismiss = { adding = false },
@@ -507,11 +501,11 @@ private fun enableBiometric(
 // ---- The list ----
 
 /**
- * Search, favourites and the category filter, in one line.
+ * Search and favourites, in one line.
  *
  * The sort order lives inside the search field rather than in the bar: it changes what the same
- * list looks like, which is what the field is for, and the screen this is modelled on puts the two
- * other filters exactly here.
+ * list looks like, which is what the field is for. A category filter sat here too, and went with it:
+ * with the list grouped by kind of record, narrowing it to one category is the editor's business.
  */
 @Composable
 private fun VaultSearchRow(
@@ -521,13 +515,9 @@ private fun VaultSearchRow(
     onOrderChange: (SortOrder) -> Unit,
     favoritesOnly: Boolean,
     onFavoritesChange: (Boolean) -> Unit,
-    categories: List<String>,
-    category: String?,
-    onCategoryChange: (String?) -> Unit,
     focus: FocusRequester,
 ) {
     var sortOpen by remember { mutableStateOf(false) }
-    var filterOpen by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -591,39 +581,6 @@ private fun VaultSearchRow(
             )
         }
 
-        Box {
-            IconButton(onClick = { filterOpen = true }) {
-                Icon(
-                    // Three lines rather than a funnel: the platform icon set has no funnel, and
-                    // this is the nearest thing in it.
-                    imageVector = Icons.Filled.List,
-                    contentDescription = stringResource(R.string.cd_category_filter),
-                    tint = if (category != null) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.all_categories)) },
-                    onClick = {
-                        onCategoryChange(null)
-                        filterOpen = false
-                    },
-                )
-                for (option in categories) {
-                    DropdownMenuItem(
-                        text = { Text(option) },
-                        onClick = {
-                            onCategoryChange(option)
-                            filterOpen = false
-                        },
-                    )
-                }
-            }
-        }
     }
 }
 
