@@ -23,7 +23,7 @@ class EntryStrengthTest {
 
     @Test
     fun `a password that repeats the entry itself is weak`() {
-        assertEquals(Strength.WEAK, strengthOf(entry("pochta-svedet")))
+        assertEquals(Strength.WEAK, strengthOf(entry("post-2024-ok", title = "Post")))
     }
 
     @Test
