@@ -1,7 +1,0 @@
-# Gradle wrapper and shell scripts must keep LF to run on Linux CI runners.
-* text=auto eol=lf
-*.bat text eol=crlf
-*.jar binary
-*.png binary
-*.apk binary
-*.aab binary
