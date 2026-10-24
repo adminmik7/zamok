@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+tools/android-sdk/
+tools/gradle-home/
+tools/jdk21/
+*.apk
+*.log
+tools/icons-*.png
+github_token
+.cortexkit/
