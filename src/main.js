@@ -1229,6 +1229,14 @@ async function importBackupText(text) {
     if (!data) return
   }
 
+  const confirmed = await confirmDialog({
+    title: 'Импортировать копию?',
+    message: 'Текущие записи будут объединены с данными из копии. Убедитесь, что у вас есть бэкап текущего хранилища.',
+    confirmLabel: 'Импортировать',
+    danger: true
+  })
+  if (!confirmed) return
+
   try {
     const added = await vault.importPlain(data, 'merge')
     hapticMedium()
