@@ -762,6 +762,7 @@ function openSettings() {
         onSubmit: async (current, next) => {
           try {
             await vault.changeMasterPassword(current, next)
+            await deleteMasterCredential()
             if (state.settings.biometrics) await saveMasterCredential(next)
             hapticMedium()
             toast('Мастер-пароль изменён', 'success')
