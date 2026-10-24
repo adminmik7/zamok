@@ -1,6 +1,6 @@
 {
   "name": "zamok",
-  "version": "1.13.1",
+  "version": "1.14",
   "description": "Офлайн-менеджер паролей с шифрованием на устройстве",
   "scripts": {
     "test": "vitest run",
