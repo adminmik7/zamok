@@ -36,7 +36,7 @@ export function toast(message, kind = 'info', duration = 2200, onClick = null) {
   const node = el('div', {
     class: `pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-medium shadow-lift backdrop-blur-xl animate-pop ${
       palette[kind] ?? palette.info
-    }${onClick ? ' cursor-pointer active:scale-[0.98]' : ''}`
+    }${onClick ? ' active:scale-[0.98]' : ''}`
   })
   if (kind === 'success') node.append(icon(ICONS.check, 'w-4 h-4 shrink-0'))
   if (kind === 'error') node.append(icon(ICONS.warning, 'w-4 h-4 shrink-0'))
@@ -53,13 +53,14 @@ export function toast(message, kind = 'info', duration = 2200, onClick = null) {
     setTimeout(() => node.remove(), 220)
   }
 
+  node.classList.add('cursor-pointer')
+  node.addEventListener('click', () => {
+    dismiss()
+    onClick?.()
+  })
   if (onClick) {
     node.setAttribute('role', 'button')
     node.setAttribute('tabindex', '0')
-    node.addEventListener('click', () => {
-      dismiss()
-      onClick()
-    })
   }
   if (duration > 0) setTimeout(dismiss, duration)
   return node
