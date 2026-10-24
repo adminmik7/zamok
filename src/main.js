@@ -634,15 +634,29 @@ function openCategories() {
         toast('Должна остаться хотя бы одна категория', 'error', 2000)
         return
       }
-      const fallback = CATEGORIES.find((item) => item.id !== category.id && item.id === 'other') ??
-        CATEGORIES.find((item) => item.id !== category.id)
-      const yes = await confirmDialog({
-        title: 'Удалить категорию?',
-        message: `Записи из «${category.label}» перейдут в «${fallback.label}».`,
-        confirmLabel: 'Удалить',
-        danger: true
+      const targets = CATEGORIES.filter((item) => item.id !== category.id)
+      let chosen = targets[0].id
+      const confirmed = await new Promise((resolve) => {
+        openModal({
+          title: 'Удалить категорию?',
+          body: el('div', { class: 'space-y-3' }, [
+            el('p', { class: 'text-sm text-ink-300', text: `Записи из «${category.label}» перейдут в:` }),
+            el('select', {
+              class: 'w-full rounded-xl border border-ink-800 bg-ink-900 px-3 py-2 text-sm text-ink-100',
+              ...targets.map((t) => el('option', { value: t.id, text: t.label })),
+              oninput: (event) => {
+                chosen = event.target.value
+              }
+            })
+          ]),
+          actions: [
+            { label: 'Отмена', onClick: () => { resolve(false); closeTopModal() } },
+            { label: 'Удалить', danger: true, primary: true, onClick: () => { resolve(true); closeTopModal() } }
+          ]
+        })
       })
-      if (!yes) return
+      if (!confirmed) return
+      const fallback = CATEGORIES.find((item) => item.id === chosen)
       await writeCategories(CATEGORIES.filter((item) => item.id !== category.id))
       await vault.batch(async () => {
         for (const entry of vault.list().filter((item) => item.category === category.id)) {

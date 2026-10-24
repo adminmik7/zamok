@@ -202,6 +202,7 @@ export function editorScreen({ item, preset = {}, defaultCategory = 'other', onC
     cardExpiryField.input.maxLength = 5
     cardNumberField.input.addEventListener('input', () => {
       cardNumberField.input.value = formatCardNumberInput(cardNumberField.input.value)
+      draft.cardBrand = detectCardBrand(cardNumberField.input.value)
     })
     cardExpiryField.input.addEventListener('input', () => {
       cardExpiryField.input.value = formatExpiryInput(cardExpiryField.input.value)
